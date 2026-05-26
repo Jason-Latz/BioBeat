@@ -37,6 +37,8 @@ For a fully local demo without collecting labels by hand, generate synthetic lab
 python src/features/generate_demo_labels.py
 ```
 
+For group workflow, role ownership, and demo-day instructions, read `GROUP_USAGE_GUIDE.md`.
+
 ## Data Contract
 
 Starter song requests live in `data/input/desired_songs.csv`. The iTunes builder writes:
