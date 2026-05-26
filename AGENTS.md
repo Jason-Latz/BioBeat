@@ -21,3 +21,4 @@ Do not leave that learning only in chat history.
 - The BioBeat dashboard should be optimized for guided self data collection: arrows to move between songs, a 30-second rest before each song, and separate HR and EDA charts.
 - Do not use `time.sleep()` plus `st.rerun()` loops for Streamlit countdowns; render the countdown client-side and validate elapsed time when the user clicks continue.
 - For one-off Python validation commands, set `PYTHONPATH=src` before importing repo packages such as `sensors` or `features`.
+- After regenerating tracked CSV artifacts, normalize line endings or verify with `git diff --check`; CRLF output appears as trailing whitespace.

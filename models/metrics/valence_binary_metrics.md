@@ -1,58 +1,58 @@
 # valence_binary
 
-rows: 96
-positive_rate: 0.510
+rows: 144
+positive_rate: 0.556
 split: holdout
 
 ## Logistic regression
 
-accuracy: 0.708
+accuracy: 0.694
 confusion_matrix:
-[[8 4]
- [3 9]]
+[[ 7  9]
+ [ 2 18]]
 classification_report:
               precision    recall  f1-score   support
 
-           0       0.73      0.67      0.70        12
-           1       0.69      0.75      0.72        12
+           0       0.78      0.44      0.56        16
+           1       0.67      0.90      0.77        20
 
-    accuracy                           0.71        24
-   macro avg       0.71      0.71      0.71        24
-weighted avg       0.71      0.71      0.71        24
+    accuracy                           0.69        36
+   macro avg       0.72      0.67      0.66        36
+weighted avg       0.72      0.69      0.67        36
 
 
 ## Random forest
 
-accuracy: 0.750
+accuracy: 0.667
 confusion_matrix:
-[[ 8  4]
- [ 2 10]]
+[[ 5 11]
+ [ 1 19]]
 classification_report:
               precision    recall  f1-score   support
 
-           0       0.80      0.67      0.73        12
-           1       0.71      0.83      0.77        12
+           0       0.83      0.31      0.45        16
+           1       0.63      0.95      0.76        20
 
-    accuracy                           0.75        24
-   macro avg       0.76      0.75      0.75        24
-weighted avg       0.76      0.75      0.75        24
+    accuracy                           0.67        36
+   macro avg       0.73      0.63      0.61        36
+weighted avg       0.72      0.67      0.62        36
 
 
 ## Random forest feature importance
 
                  feature  importance
-            mfcc_mean_13    0.062477
-             hr_recovery    0.053746
- hr_change_from_baseline    0.050143
-             mfcc_mean_7    0.042906
-              mfcc_std_8    0.040081
-                eda_mean    0.036882
-                  hr_max    0.034628
-               eda_slope    0.032337
-eda_change_from_baseline    0.031128
-                hr_slope    0.029422
-            eda_recovery    0.027869
-              mfcc_std_6    0.026805
-       eda_max_amplitude    0.026485
-  spectral_bandwidth_std    0.025609
-             mfcc_std_11    0.024024
+             mfcc_mean_7    0.054049
+              mfcc_std_7    0.048980
+                eda_mean    0.045441
+eda_change_from_baseline    0.038609
+            mfcc_mean_13    0.035332
+       eda_max_amplitude    0.034930
+          eda_peak_count    0.033394
+             hr_recovery    0.031873
+                hr_slope    0.031389
+               eda_slope    0.031235
+ hr_change_from_baseline    0.030255
+                 hr_mean    0.028205
+            eda_recovery    0.025174
+                  hr_max    0.024267
+              mfcc_std_5    0.023662
