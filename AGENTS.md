@@ -19,3 +19,4 @@ Do not leave that learning only in chat history.
 - In Streamlit code, use `width="stretch"` instead of deprecated `use_container_width=True`.
 - Cache-only data generation runs should not rewrite existing generated CSVs.
 - The BioBeat dashboard should be optimized for guided self data collection: arrows to move between songs, a 30-second rest before each song, and separate HR and EDA charts.
+- Do not use `time.sleep()` plus `st.rerun()` loops for Streamlit countdowns; render the countdown client-side and validate elapsed time when the user clicks continue.

@@ -242,17 +242,51 @@ def countdown_panel(label: str, state_key: str, seconds: int, done_stage: str) -
             st.rerun()
         return
 
-    elapsed = int(time.time() - started_at)
-    remaining = max(0, seconds - elapsed)
-    st.progress((seconds - remaining) / seconds, text=f"{remaining}s remaining")
-    if remaining > 0:
-        time.sleep(1)
-        st.rerun()
+    target_ms = int((float(started_at) + seconds) * 1000)
+    timer_id = f"{label}-{state_key}".replace("_", "-")
+    st.iframe(
+        f"""
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                    border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px;
+                    background: #f8fafc;">
+          <div style="font-size: 13px; color: #475569; margin-bottom: 8px;">
+            {seconds}-second {label} timer
+          </div>
+          <div id="{timer_id}" style="font-size: 36px; font-weight: 700; color: #0f172a;">
+            --s
+          </div>
+          <div id="{timer_id}-note" style="font-size: 13px; color: #475569; margin-top: 8px;">
+            Stay still and breathe normally. This timer updates locally, so the page should not flicker.
+          </div>
+        </div>
+        <script>
+          const target{timer_id.replace("-", "")} = {target_ms};
+          const valueEl{timer_id.replace("-", "")} = document.getElementById("{timer_id}");
+          const noteEl{timer_id.replace("-", "")} = document.getElementById("{timer_id}-note");
+          function tick{timer_id.replace("-", "")}() {{
+            const remaining = Math.max(0, Math.ceil((target{timer_id.replace("-", "")} - Date.now()) / 1000));
+            valueEl{timer_id.replace("-", "")}.textContent = remaining + "s";
+            if (remaining === 0) {{
+              noteEl{timer_id.replace("-", "")}.textContent = "Timer complete. Click Continue when ready.";
+              valueEl{timer_id.replace("-", "")}.style.color = "#166534";
+            }} else {{
+              window.setTimeout(tick{timer_id.replace("-", "")}, 250);
+            }}
+          }}
+          tick{timer_id.replace("-", "")}();
+        </script>
+        """,
+        width="stretch",
+        height=142,
+    )
 
-    st.success(f"{label.capitalize()} complete.")
-    if st.button("Continue", width="stretch"):
-        st.session_state.stage = done_stage
-        st.rerun()
+    if st.button(f"Continue after {label}", width="stretch"):
+        elapsed = time.time() - float(started_at)
+        if elapsed < seconds:
+            st.warning(f"Wait {int(np.ceil(seconds - elapsed))} more seconds before continuing.")
+        else:
+            st.session_state.stage = done_stage
+            st.rerun()
 
 
 def render_navigation(total: int) -> None:
