@@ -9,7 +9,7 @@ Use these ownership lanes to avoid overwriting each other.
 | Role | Main files | Responsibility |
 | --- | --- | --- |
 | Music/data person | `data/input/desired_songs.csv`, `data/clips.csv` | Add songs, run the iTunes clip builder, check that preview URLs are correct. |
-| Experiment operator | `src/experiment/runner_streamlit.py`, `data/raw/labels/` | Run participant sessions and make sure labels save correctly. |
+| Experiment operator | `src/dashboard/app.py`, `data/raw/labels/` | Run participant sessions and make sure labels save correctly. |
 | Sensor team | `data/raw/sensor/`, `data/processed/biometric_features_real.csv` | Collect HR/EDA data and export real biometric features with the agreed schema. |
 | ML person | `src/features/`, `src/models/` | Extract audio features, merge tables, train/evaluate models, generate recommendations. |
 | Dashboard/demo person | `src/dashboard/app.py`, `data/processed/recommendations.csv` | Run the replay dashboard and prepare the final demo flow. |
@@ -94,10 +94,10 @@ If a selected song is wrong:
 python src/itunes/build_clips_csv.py
 ```
 
-### 3. Run A Participant Experiment Session
+### 3. Run A Self-Training Session
 
 ```bash
-streamlit run src/experiment/runner_streamlit.py
+streamlit run src/dashboard/app.py
 ```
 
 Open the Streamlit URL, usually:
@@ -110,10 +110,12 @@ For each participant:
 
 1. Enter a unique `user_id`, for example `jason`, `p01`, or `participant_03`.
 2. Enter a unique `session_id`, for example `s01` or `p03_s01`.
-3. Click `Start`.
-4. For each clip, click `Start clip`, play/listen, then save ratings.
+3. Click `Begin / restart session`.
+4. Use `Previous` and `Next` to move between songs if needed.
+5. For each song, complete the 30-second rest period before listening.
+6. Play the 30-second preview, start the song timer, then rate the song.
 
-The runner saves after every trial, so losing the browser should not lose the whole session.
+The dashboard saves after every rating, so losing the browser should not lose the whole session.
 
 Labels are written to:
 
@@ -234,16 +236,19 @@ Open the Streamlit URL, usually:
 http://localhost:8501
 ```
 
-Use replay/demo mode to show:
+Use the dashboard to collect training labels and inspect model signals. It shows:
 
 - current participant
 - current song
 - audio player
+- previous/next song navigation
+- 30-second rest timer before each song
 - self-report labels
-- fake or replayed HR/EDA values
+- fake or replayed HR values
+- fake or replayed EDA values
 - predicted arousal state
 - recommended next song
-- HR/EDA chart for the current trial
+- separate HR and EDA charts for the current trial
 
 ## Quick Full Demo Reset
 

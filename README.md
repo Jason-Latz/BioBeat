@@ -22,14 +22,15 @@ brew install ffmpeg
 
 ```bash
 python src/itunes/build_clips_csv.py
-streamlit run src/experiment/runner_streamlit.py
+streamlit run src/dashboard/app.py
 python src/features/extract_audio_features.py
 python src/features/generate_fake_biometrics.py
 python src/features/merge_features.py
 python src/models/train_models.py
 python src/models/recommend.py --target-mode all --user-id demo_user
-streamlit run src/dashboard/app.py
 ```
+
+The dashboard is the preferred self-training collection UI. It guides a participant through a 30-second rest period, a 30-second music preview, and a rating form for each song.
 
 For a fully local demo without collecting labels by hand, generate synthetic labels first:
 

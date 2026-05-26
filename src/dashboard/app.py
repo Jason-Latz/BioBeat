@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import csv
 import glob
+import random
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +23,38 @@ from biobeat_paths import (  # noqa: E402
 )
 
 
+REST_SECONDS = 30
+LISTEN_SECONDS = 30
+LABEL_COLUMNS = [
+    "user_id",
+    "session_id",
+    "clip_id",
+    "trial_index",
+    "clip_start_time",
+    "clip_end_time",
+    "preference",
+    "arousal",
+    "valence",
+    "mood",
+    "familiarity",
+    "notes",
+]
+MOOD_OPTIONS = [
+    "happy",
+    "sad",
+    "relaxed",
+    "tense",
+    "excited",
+    "annoyed",
+    "neutral",
+    "other",
+]
+
+
+def iso_now() -> str:
+    return datetime.now().isoformat(timespec="milliseconds")
+
+
 def read_csv_if_exists(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
@@ -29,7 +65,7 @@ def read_csv_if_exists(path: Path) -> pd.DataFrame:
 def load_labels(labels_dir: Path) -> pd.DataFrame:
     paths = sorted(glob.glob(str(labels_dir / "*_labels.csv")))
     frames = [pd.read_csv(path) for path in paths]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=LABEL_COLUMNS)
 
 
 @st.cache_data
@@ -41,16 +77,83 @@ def load_dashboard_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.
     return clips, labels, biometrics, recommendations
 
 
-def selected_label_rows(labels: pd.DataFrame, user_id: str, session_id: str) -> pd.DataFrame:
+def label_path(session_id: str) -> Path:
+    safe_session = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in session_id)
+    return LABELS_DIR / f"{safe_session}_labels.csv"
+
+
+def write_label_row(row: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, object]] = []
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+
+    rows = [
+        existing
+        for existing in rows
+        if not (
+            str(existing.get("user_id")) == str(row["user_id"])
+            and str(existing.get("session_id")) == str(row["session_id"])
+            and str(existing.get("clip_id")) == str(row["clip_id"])
+        )
+    ]
+    rows.append(row)
+    rows.sort(key=lambda item: int(item.get("trial_index", 0)))
+
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=LABEL_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def session_label_rows(labels: pd.DataFrame, user_id: str, session_id: str) -> pd.DataFrame:
     if labels.empty:
-        return labels
+        return pd.DataFrame(columns=LABEL_COLUMNS)
     rows = labels[
         (labels["user_id"].astype(str) == str(user_id))
         & (labels["session_id"].astype(str) == str(session_id))
     ].copy()
-    if "trial_index" in rows.columns:
+    if not rows.empty:
+        rows["trial_index"] = pd.to_numeric(rows["trial_index"], errors="coerce")
         rows = rows.sort_values("trial_index")
     return rows
+
+
+def initialize_collection(clips: pd.DataFrame, user_id: str, session_id: str) -> None:
+    order = clips["clip_id"].astype(str).tolist()
+    random.Random(session_id).shuffle(order)
+    st.session_state.collection_started = True
+    st.session_state.user_id = user_id
+    st.session_state.session_id = session_id
+    st.session_state.order = order
+    st.session_state.trial_position = 0
+    reset_trial_state(stage="rest")
+
+
+def reset_trial_state(*, stage: str) -> None:
+    st.session_state.stage = stage
+    st.session_state.rest_started_at = None
+    st.session_state.listen_started_at = None
+    st.session_state.clip_start_time = None
+    st.session_state.clip_end_time = None
+
+
+def current_clip(clips: pd.DataFrame) -> pd.Series:
+    clip_id = st.session_state.order[st.session_state.trial_position]
+    return clips[clips["clip_id"].astype(str) == clip_id].iloc[0]
+
+
+def move_trial(delta: int) -> None:
+    next_position = st.session_state.trial_position + delta
+    st.session_state.trial_position = max(0, min(next_position, len(st.session_state.order) - 1))
+    reset_trial_state(stage="rest")
+
+
+def existing_label(labels: pd.DataFrame, user_id: str, session_id: str, clip_id: str) -> pd.Series | None:
+    rows = session_label_rows(labels, user_id, session_id)
+    rows = rows[rows["clip_id"].astype(str) == str(clip_id)]
+    return None if rows.empty else rows.iloc[0]
 
 
 def biometric_row(
@@ -81,36 +184,6 @@ def prediction_row(recommendations: pd.DataFrame, user_id: str, clip_id: str) ->
     return None if rows.empty else rows.iloc[0]
 
 
-def arousal_state(row: pd.Series | None, prediction: pd.Series | None) -> tuple[str, float | None]:
-    if prediction is not None and "arousal_prob" in prediction:
-        probability = float(prediction["arousal_prob"])
-        return ("energized" if probability >= 0.5 else "calm", probability)
-
-    if row is None:
-        return "unknown", None
-    hr_change = float(row.get("hr_change_from_baseline", 0))
-    eda_peaks = float(row.get("eda_peak_count", 0))
-    proxy = min(1.0, max(0.0, (hr_change / 15 * 0.65) + (eda_peaks / 8 * 0.35)))
-    return ("energized" if proxy >= 0.5 else "calm", proxy)
-
-
-def trial_trace(row: pd.Series | None, clip_id: str) -> pd.DataFrame:
-    rng = np.random.default_rng(abs(hash(clip_id)) % (2**32))
-    seconds = np.arange(0, 31)
-    if row is None:
-        return pd.DataFrame({"second": seconds, "HR": np.nan, "EDA": np.nan}).set_index("second")
-
-    hr_mean = float(row.get("hr_mean", 70))
-    hr_change = float(row.get("hr_change_from_baseline", 0))
-    eda_mean = float(row.get("eda_mean", 1.0))
-    eda_change = float(row.get("eda_change_from_baseline", 0))
-
-    ramp = np.sin(np.linspace(0, np.pi, len(seconds)))
-    hr = hr_mean - hr_change * 0.35 + ramp * hr_change * 0.75 + rng.normal(0, 0.7, len(seconds))
-    eda = eda_mean - eda_change * 0.30 + ramp * eda_change * 0.85 + rng.normal(0, 0.012, len(seconds))
-    return pd.DataFrame({"second": seconds, "HR": hr, "EDA": eda}).set_index("second")
-
-
 def next_recommendation(
     recommendations: pd.DataFrame,
     user_id: str,
@@ -127,10 +200,225 @@ def next_recommendation(
     return None if rows.empty else rows.iloc[0]
 
 
+def arousal_state(row: pd.Series | None, prediction: pd.Series | None) -> tuple[str, float | None]:
+    if prediction is not None and "arousal_prob" in prediction:
+        probability = float(prediction["arousal_prob"])
+        return ("energized" if probability >= 0.5 else "calm", probability)
+
+    if row is None:
+        return "unknown", None
+    hr_change = float(row.get("hr_change_from_baseline", 0))
+    eda_peaks = float(row.get("eda_peak_count", 0))
+    proxy = min(1.0, max(0.0, (hr_change / 15 * 0.65) + (eda_peaks / 8 * 0.35)))
+    return ("energized" if proxy >= 0.5 else "calm", proxy)
+
+
+def trial_traces(row: pd.Series | None, clip_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    rng = np.random.default_rng(abs(hash(clip_id)) % (2**32))
+    seconds = np.arange(0, 31)
+    if row is None:
+        empty = pd.DataFrame({"second": seconds, "value": np.nan}).set_index("second")
+        return empty, empty
+
+    hr_mean = float(row.get("hr_mean", 70))
+    hr_change = float(row.get("hr_change_from_baseline", 0))
+    eda_mean = float(row.get("eda_mean", 1.0))
+    eda_change = float(row.get("eda_change_from_baseline", 0))
+    ramp = np.sin(np.linspace(0, np.pi, len(seconds)))
+
+    hr = hr_mean - hr_change * 0.35 + ramp * hr_change * 0.75 + rng.normal(0, 0.7, len(seconds))
+    eda = eda_mean - eda_change * 0.30 + ramp * eda_change * 0.85 + rng.normal(0, 0.012, len(seconds))
+
+    hr_frame = pd.DataFrame({"second": seconds, "HR bpm": hr}).set_index("second")
+    eda_frame = pd.DataFrame({"second": seconds, "EDA conductance": eda}).set_index("second")
+    return hr_frame, eda_frame
+
+
+def countdown_panel(label: str, state_key: str, seconds: int, done_stage: str) -> None:
+    started_at = st.session_state.get(state_key)
+    if started_at is None:
+        if st.button(f"Start {seconds}s {label}", width="stretch"):
+            st.session_state[state_key] = time.time()
+            st.rerun()
+        return
+
+    elapsed = int(time.time() - started_at)
+    remaining = max(0, seconds - elapsed)
+    st.progress((seconds - remaining) / seconds, text=f"{remaining}s remaining")
+    if remaining > 0:
+        time.sleep(1)
+        st.rerun()
+
+    st.success(f"{label.capitalize()} complete.")
+    if st.button("Continue", width="stretch"):
+        st.session_state.stage = done_stage
+        st.rerun()
+
+
+def render_navigation(total: int) -> None:
+    prev_col, center_col, next_col = st.columns([1, 2, 1])
+    with prev_col:
+        if st.button("← Previous", disabled=st.session_state.trial_position == 0, width="stretch"):
+            move_trial(-1)
+            st.rerun()
+    with center_col:
+        st.progress(
+            (st.session_state.trial_position + 1) / total,
+            text=f"Song {st.session_state.trial_position + 1} of {total}",
+        )
+    with next_col:
+        if st.button("Next →", disabled=st.session_state.trial_position >= total - 1, width="stretch"):
+            move_trial(1)
+            st.rerun()
+
+
+def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
+    user_id = st.session_state.user_id
+    session_id = st.session_state.session_id
+    clip_id = str(clip["clip_id"])
+    saved = existing_label(labels, user_id, session_id, clip_id)
+
+    if saved is not None:
+        st.success("This song already has a saved rating. You can overwrite it below or move to another song.")
+
+    st.subheader(f"{clip['track_name']} - {clip['artist']}")
+    st.caption("Flow: rest for 30 seconds, play the 30-second preview, then rate how you felt.")
+
+    stage = st.session_state.get("stage", "rest")
+    if stage == "rest":
+        st.info("Rest quietly before the song so HR and EDA can settle toward baseline.")
+        countdown_panel("rest", "rest_started_at", REST_SECONDS, "listen")
+        return
+
+    if stage == "listen":
+        st.audio(str(clip["preview_url"]))
+        st.caption("Press play on the audio, then start the 30-second listen timer.")
+        if st.session_state.clip_start_time is None and st.session_state.listen_started_at is None:
+            if st.button("Start song timer", width="stretch"):
+                st.session_state.clip_start_time = iso_now()
+                st.session_state.listen_started_at = time.time()
+                st.rerun()
+            return
+        countdown_panel("song", "listen_started_at", LISTEN_SECONDS, "rate")
+        if st.session_state.stage == "rate" and st.session_state.clip_end_time is None:
+            st.session_state.clip_end_time = iso_now()
+        return
+
+    default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
+    with st.form("rating_form"):
+        st.write("Rate the song you just heard.")
+        preference = st.slider(
+            "Preference",
+            1,
+            5,
+            int(saved["preference"]) if saved is not None else 3,
+            help="1 = dislike, 5 = like",
+        )
+        arousal = st.slider(
+            "Arousal",
+            1,
+            5,
+            int(saved["arousal"]) if saved is not None else 3,
+            help="1 = calm, 5 = energized",
+        )
+        valence = st.slider(
+            "Valence",
+            1,
+            5,
+            int(saved["valence"]) if saved is not None else 3,
+            help="1 = negative, 5 = positive",
+        )
+        mood = st.selectbox("Mood", MOOD_OPTIONS, index=MOOD_OPTIONS.index(default_mood))
+        other_mood = st.text_input("Mood detail") if mood == "other" else ""
+        familiarity = st.slider(
+            "Familiarity",
+            1,
+            5,
+            int(saved["familiarity"]) if saved is not None else 3,
+            help="1 = unfamiliar, 5 = very familiar",
+        )
+        notes = st.text_area("Notes", value="" if saved is None or pd.isna(saved.get("notes", "")) else str(saved["notes"]))
+        submitted = st.form_submit_button("Save rating")
+
+    if submitted:
+        row = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "clip_id": clip_id,
+            "trial_index": st.session_state.trial_position + 1,
+            "clip_start_time": st.session_state.clip_start_time or iso_now(),
+            "clip_end_time": st.session_state.clip_end_time or iso_now(),
+            "preference": preference,
+            "arousal": arousal,
+            "valence": valence,
+            "mood": other_mood.strip() if mood == "other" and other_mood.strip() else mood,
+            "familiarity": familiarity,
+            "notes": notes.strip(),
+        }
+        write_label_row(row, label_path(session_id))
+        st.cache_data.clear()
+        if st.session_state.trial_position < len(st.session_state.order) - 1:
+            move_trial(1)
+        else:
+            st.session_state.stage = "complete"
+        st.rerun()
+
+
+def render_biometrics_and_prediction(
+    biometrics: pd.DataFrame,
+    recommendations: pd.DataFrame,
+    user_id: str,
+    session_id: str,
+    clip_id: str,
+    target_mode: str,
+) -> None:
+    bio = biometric_row(biometrics, user_id, session_id, clip_id)
+    pred = prediction_row(recommendations, user_id, clip_id)
+    state, arousal_prob = arousal_state(bio, pred)
+    next_song = next_recommendation(recommendations, user_id, target_mode, clip_id)
+
+    prediction_col, rec_col = st.columns(2)
+    with prediction_col:
+        st.subheader("Model Signal")
+        st.metric("Predicted arousal", state)
+        if arousal_prob is not None:
+            st.progress(float(arousal_prob), text=f"{arousal_prob:.0%} energized")
+    with rec_col:
+        st.subheader("Next Recommendation")
+        if next_song is None:
+            st.info("Run `python src/models/recommend.py --target-mode all --user-id <id> --session-id <id>` after collecting labels.")
+        else:
+            st.write(f"**{next_song['track_name']}**")
+            st.write(str(next_song["artist"]))
+            st.metric("Score", f"{float(next_song['score']):.2f}")
+
+    st.subheader("Biometric Preview")
+    if bio is None:
+        st.info("No biometric row found yet. After real sensors are ready, this section should use the real export.")
+        return
+
+    metrics = st.columns(6)
+    metrics[0].metric("HR mean", f"{float(bio['hr_mean']):.1f} bpm")
+    metrics[1].metric("HR max", f"{float(bio['hr_max']):.1f} bpm")
+    metrics[2].metric("HR change", f"{float(bio['hr_change_from_baseline']):+.1f} bpm")
+    metrics[3].metric("EDA mean", f"{float(bio['eda_mean']):.3f}")
+    metrics[4].metric("EDA peaks", int(bio["eda_peak_count"]))
+    metrics[5].metric("EDA amplitude", f"{float(bio['eda_max_amplitude']):.3f}")
+
+    hr_frame, eda_frame = trial_traces(bio, clip_id)
+    hr_col, eda_col = st.columns(2)
+    with hr_col:
+        st.caption("Heart rate response")
+        st.line_chart(hr_frame, height=240)
+    with eda_col:
+        st.caption("EDA/GSR response")
+        st.line_chart(eda_frame, height=240)
+
+
 def main() -> None:
     ensure_project_dirs()
-    st.set_page_config(page_title="BioBeat Dashboard", page_icon="BB", layout="wide")
-    st.title("BioBeat Dashboard")
+    st.set_page_config(page_title="BioBeat Self-Training", page_icon="BB", layout="wide")
+    st.title("BioBeat Self-Training")
 
     clips, labels, biometrics, recommendations = load_dashboard_data()
     if clips.empty:
@@ -138,101 +426,46 @@ def main() -> None:
         st.stop()
 
     with st.sidebar:
-        mode = st.radio("Mode", ["Replay/demo", "Live"], horizontal=True)
-        if mode == "Live":
-            st.warning("Live sensor mode is reserved for the sensor-team stream.")
+        st.header("Session")
+        default_session = datetime.now().strftime("self_%Y%m%d_%H%M%S")
+        user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
+        session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
+        target_mode = st.segmented_control("Recommendation mode", ["calm", "hype"], default="calm")
+        if st.button("Begin / restart session", disabled=not user_id.strip() or not session_id.strip(), width="stretch"):
+            initialize_collection(clips, user_id.strip(), session_id.strip())
+            st.rerun()
 
-        user_options = sorted(labels["user_id"].astype(str).unique()) if not labels.empty else ["demo_user"]
-        user_id = st.selectbox("Participant", user_options)
+        if st.session_state.get("collection_started"):
+            path = label_path(st.session_state.session_id)
+            st.caption(f"Saving to `{path.relative_to(Path.cwd())}`")
 
-        session_options = (
-            sorted(labels[labels["user_id"].astype(str) == user_id]["session_id"].astype(str).unique())
-            if not labels.empty
-            else ["demo_session"]
-        )
-        session_id = st.selectbox("Session", session_options)
-        target_mode = st.segmented_control("Recommendation", ["calm", "hype"], default="calm")
+    if not st.session_state.get("collection_started"):
+        st.info("Enter a user ID and session ID, then begin. The app will guide you through rest, listening, and rating.")
+        st.stop()
 
-    session_labels = selected_label_rows(labels, user_id, session_id)
-    if session_labels.empty:
-        clip_choices = clips["clip_id"].astype(str).tolist()
-        selected_clip_id = st.sidebar.selectbox("Clip", clip_choices)
-        label = None
-    else:
-        trial_labels = [
-            f"{int(row.trial_index)} - {row.clip_id}" for row in session_labels.itertuples(index=False)
-        ]
-        selected_trial = st.sidebar.selectbox("Trial", trial_labels)
-        selected_clip_id = selected_trial.split(" - ", 1)[1]
-        label = session_labels[session_labels["clip_id"].astype(str) == selected_clip_id].iloc[0]
+    total = len(st.session_state.order)
+    render_navigation(total)
 
-    clip = clips[clips["clip_id"].astype(str) == selected_clip_id].iloc[0]
-    bio = biometric_row(biometrics, user_id, session_id, selected_clip_id)
-    pred = prediction_row(recommendations, user_id, selected_clip_id)
-    state, arousal_prob = arousal_state(bio, pred)
-    next_song = next_recommendation(recommendations, user_id, str(target_mode), selected_clip_id)
+    if st.session_state.get("stage") == "complete":
+        st.success("Session complete. Labels were saved after each song.")
+        st.stop()
 
-    top_left, top_mid, top_right = st.columns([1.3, 1.1, 1])
-    with top_left:
-        st.caption("Current song")
-        st.subheader(str(clip["track_name"]))
-        st.write(str(clip["artist"]))
-        st.audio(str(clip["preview_url"]))
+    clip = current_clip(clips)
+    session_rows = session_label_rows(labels, st.session_state.user_id, st.session_state.session_id)
+    completed = session_rows["clip_id"].nunique() if not session_rows.empty else 0
+    st.caption(f"Saved ratings: {completed} of {total}")
 
-    with top_mid:
-        st.caption("Participant")
-        st.metric("User", user_id)
-        st.metric("Session", session_id)
-        if label is not None:
-            st.metric("Preference", int(label["preference"]))
-            st.metric("Arousal rating", int(label["arousal"]))
-            st.metric("Valence rating", int(label["valence"]))
-
-    with top_right:
-        st.caption("Prediction")
-        st.metric("Predicted arousal", state)
-        if arousal_prob is not None:
-            st.progress(float(arousal_prob), text=f"{arousal_prob:.0%} energized")
-        if next_song is not None:
-            st.caption("Recommended next")
-            st.write(f"**{next_song['track_name']}**")
-            st.write(str(next_song["artist"]))
-            st.metric("Score", f"{float(next_song['score']):.2f}")
-
-    chart_col, metric_col = st.columns([1.5, 1])
-    with chart_col:
-        st.subheader("Trial Trace")
-        st.line_chart(trial_trace(bio, selected_clip_id), height=320)
-
-    with metric_col:
-        st.subheader("Biometrics")
-        if bio is None:
-            st.info("No biometric row found for this trial.")
-        else:
-            st.metric("HR mean", f"{float(bio['hr_mean']):.1f} bpm")
-            st.metric("HR max", f"{float(bio['hr_max']):.1f} bpm")
-            st.metric("HR change", f"{float(bio['hr_change_from_baseline']):+.1f} bpm")
-            st.metric("EDA mean", f"{float(bio['eda_mean']):.3f}")
-            st.metric("EDA peaks", int(bio["eda_peak_count"]))
-            st.metric("EDA max amplitude", f"{float(bio['eda_max_amplitude']):.3f}")
-
-    if label is not None:
-        st.subheader("Self Report")
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "preference": label["preference"],
-                        "arousal": label["arousal"],
-                        "valence": label["valence"],
-                        "mood": label["mood"],
-                        "familiarity": label["familiarity"],
-                        "notes": label.get("notes", ""),
-                    }
-                ]
-            ),
-            hide_index=True,
-            width="stretch",
+    collection_col, signal_col = st.columns([1.05, 0.95])
+    with collection_col:
+        render_collection_flow(clip, labels)
+    with signal_col:
+        render_biometrics_and_prediction(
+            biometrics,
+            recommendations,
+            st.session_state.user_id,
+            st.session_state.session_id,
+            str(clip["clip_id"]),
+            str(target_mode),
         )
 
 
