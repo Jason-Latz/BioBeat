@@ -2,7 +2,7 @@
 
 BioBeat is a music recommendation prototype that combines short music previews, self-reported mood labels, audio features, and biometric features to train mood-aware recommendation models.
 
-The current implementation has a training collector for self-runs. It can record mock HR/EDA data for testing, or read Arduino-over-USB serial data when the hardware is ready. It also extracts audio features with `librosa`, turns raw sensor streams into biometric features, and trains baseline models.
+The current implementation has a training collector for self-runs. It can record mock HR/EDA data for testing, read EDA/GSR values from a Seeed GSR sensor connected through a Raspberry Pi serial stream during collection, and import Apple Watch/Apple Health heart-rate CSV rows after a session. It also extracts audio features with `librosa`, turns raw sensor streams into biometric features, and trains baseline models.
 
 ## Quick Start
 
@@ -23,6 +23,7 @@ brew install ffmpeg
 ```bash
 python src/itunes/build_clips_csv.py
 streamlit run src/dashboard/app.py
+python src/sensors/import_apple_watch_hr.py --health-csv path/to/apple_watch_hr.csv --labels-file data/raw/labels/jason_s01_labels.csv
 python src/features/extract_audio_features.py
 python src/features/extract_biometric_features.py
 python src/features/merge_features.py --use-real-biometrics
@@ -30,15 +31,18 @@ python src/models/train_models.py
 python src/models/recommend.py --target-mode all --user-id demo_user
 ```
 
-The dashboard is the training collection UI. It guides a participant through a 30-second rest recording, a 30-second song recording, and a rating form for each song. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
+The dashboard is the training collection UI. It first reminds the participant to start an Apple Watch Workout, then guides them through a 30-second rest recording, a 30-second song recording, and a rating form for each song. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
 
-Arduino serial lines can be any of these formats:
+The Raspberry Pi stream for the Seeed GSR sensor can print any of these formats:
 
 ```text
-HR:72,EDA:1.42
-72,1.42
-{"hr":72,"eda":1.42}
+GSR:1.42
+EDA:1.42
+1.42
+{"gsr":1.42}
 ```
+
+Apple Watch HR is imported at the end of the dashboard session from a CSV exported from Apple Health or a Health export app. The upload panel matches HR timestamps to the rest/listen windows in the labels file, previews per-song HR sample coverage, then appends HR-only rows to the same raw sensor CSV. The command-line importer is still available for repeat imports or debugging.
 
 For a fully local demo without collecting labels by hand, generate synthetic labels first:
 
@@ -56,7 +60,7 @@ Starter song requests live in `data/input/desired_songs.csv`. The iTunes builder
 - `data/input/clip_overrides_template.csv`: editable selection template
 - `data/clips.csv`: final selected preview clips
 
-Experiment labels are written incrementally to `data/raw/labels/{session_id}_labels.csv`. Raw sensor samples are written to `data/raw/sensor/{session_id}_sensor.csv`.
+Experiment labels are written incrementally to `data/raw/labels/{session_id}_labels.csv`. Raw sensor samples are written to `data/raw/sensor/{session_id}_sensor.csv`. It is fine for individual rows to contain only HR or only EDA; the feature extractor summarizes whichever values are present.
 
 The sensor feature extractor writes `data/processed/biometric_features_real.csv` using this schema:
 

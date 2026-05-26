@@ -9,7 +9,10 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
+
+
+SingleValueMetric = Literal["hr", "eda"]
 
 
 @dataclass
@@ -65,7 +68,12 @@ def _sample_from_mapping(values: dict[str, object], raw_line: str, source: str) 
     return SensorSample(timestamp=iso_now(), hr=hr, eda=eda, source=source, raw_line=raw_line)
 
 
-def parse_sensor_line(line: str, *, source: str = "arduino") -> SensorSample | None:
+def parse_sensor_line(
+    line: str,
+    *,
+    source: str = "serial",
+    single_value_metric: SingleValueMetric | None = None,
+) -> SensorSample | None:
     raw_line = line.strip()
     if not raw_line:
         return None
@@ -88,6 +96,17 @@ def parse_sensor_line(line: str, *, source: str = "arduino") -> SensorSample | N
         if hr is not None or eda is not None:
             return SensorSample(timestamp=iso_now(), hr=hr, eda=eda, source=source, raw_line=raw_line)
 
+    if len(csv_values) == 1 and single_value_metric is not None:
+        value = _float_or_none(csv_values[0])
+        if value is not None:
+            return SensorSample(
+                timestamp=iso_now(),
+                hr=value if single_value_metric == "hr" else None,
+                eda=value if single_value_metric == "eda" else None,
+                source=source,
+                raw_line=raw_line,
+            )
+
     return None
 
 
@@ -107,13 +126,22 @@ class MockSensorReader:
         return None
 
 
-class ArduinoSerialReader:
-    def __init__(self, port: str, baud_rate: int = 115200) -> None:
+class SerialSensorReader:
+    def __init__(
+        self,
+        port: str,
+        baud_rate: int = 115200,
+        *,
+        source: str = "serial",
+        single_value_metric: SingleValueMetric | None = None,
+    ) -> None:
         try:
             import serial
         except ImportError as exc:
             raise RuntimeError("pyserial is not installed. Run `pip install -r requirements.txt`.") from exc
 
+        self.source = source
+        self.single_value_metric = single_value_metric
         self.serial = serial.Serial(port=port, baudrate=baud_rate, timeout=0.2)
         time.sleep(2)
         self.serial.reset_input_buffer()
@@ -125,7 +153,11 @@ class ArduinoSerialReader:
             if not raw:
                 continue
             line = raw.decode("utf-8", errors="replace")
-            sample = parse_sensor_line(line, source="arduino")
+            sample = parse_sensor_line(
+                line,
+                source=self.source,
+                single_value_metric=self.single_value_metric,
+            )
             if sample is not None:
                 return sample
         return None

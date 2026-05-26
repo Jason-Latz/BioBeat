@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import inspect
 import random
 import sys
 from datetime import datetime
@@ -43,6 +44,12 @@ MOOD_OPTIONS = [
 
 def iso_now() -> str:
     return datetime.now().isoformat(timespec="milliseconds")
+
+
+def full_width_button(label: str, **kwargs: object) -> bool:
+    if "width" in inspect.signature(st.button).parameters:
+        return st.button(label, width="stretch", **kwargs)
+    return st.button(label, use_container_width=True, **kwargs)
 
 
 @st.cache_data
@@ -112,7 +119,7 @@ def main() -> None:
         user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
         session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
         start_disabled = not user_id.strip() or not session_id.strip()
-        if st.button("Start", disabled=start_disabled, width="stretch"):
+        if full_width_button("Start", disabled=start_disabled):
             initialize_session(clips, user_id.strip(), session_id.strip())
 
         if st.session_state.get("started"):
@@ -136,7 +143,7 @@ def main() -> None:
     st.write(f"**{clip['track_name']}**")
     st.write(str(clip["artist"]))
 
-    if st.button("Start clip", disabled=st.session_state.trial_active, width="stretch"):
+    if full_width_button("Start clip", disabled=st.session_state.trial_active):
         st.session_state.clip_start_time = iso_now()
         st.session_state.trial_active = True
 

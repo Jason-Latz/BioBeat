@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import glob
+import inspect
 import random
 import sys
 import time
@@ -15,9 +16,10 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from biobeat_paths import CLIPS_CSV, LABELS_DIR, RAW_DIR, ensure_project_dirs  # noqa: E402
-from sensors.arduino_serial import (  # noqa: E402
-    ArduinoSerialReader,
+from sensors.import_apple_watch_hr import build_hr_rows_from_frames, write_imported_rows  # noqa: E402
+from sensors.serial_readers import (  # noqa: E402
     MockSensorReader,
+    SerialSensorReader,
     append_sensor_rows,
     list_serial_ports,
     sample_to_row,
@@ -26,6 +28,7 @@ from sensors.arduino_serial import (  # noqa: E402
 
 REST_SECONDS = 30
 LISTEN_SECONDS = 30
+APPLE_WATCH_SOURCE = "apple_watch_csv"
 LABEL_COLUMNS = [
     "user_id",
     "session_id",
@@ -68,6 +71,12 @@ MOOD_OPTIONS = [
 
 def iso_now() -> str:
     return datetime.now().isoformat(timespec="milliseconds")
+
+
+def full_width_button(label: str, **kwargs: object) -> bool:
+    if "width" in inspect.signature(st.button).parameters:
+        return st.button(label, width="stretch", **kwargs)
+    return st.button(label, use_container_width=True, **kwargs)
 
 
 def safe_file_id(value: str) -> str:
@@ -113,6 +122,29 @@ def load_labels(labels_dir: Path) -> pd.DataFrame:
 
 def load_sensor_rows(session_id: str) -> pd.DataFrame:
     return read_csv_if_exists(sensor_path(session_id), SENSOR_COLUMNS)
+
+
+def summarize_hr_rows(rows: list[dict[str, object]], labels: pd.DataFrame) -> pd.DataFrame:
+    summary_rows: list[dict[str, object]] = []
+    hr_rows = pd.DataFrame(rows)
+    for _, label in labels.iterrows():
+        trial_index = int(label["trial_index"])
+        clip_id = str(label["clip_id"])
+        trial_rows = pd.DataFrame()
+        if not hr_rows.empty:
+            trial_rows = hr_rows[
+                (hr_rows["clip_id"].astype(str) == clip_id)
+                & (pd.to_numeric(hr_rows["trial_index"], errors="coerce") == trial_index)
+            ]
+        summary_rows.append(
+            {
+                "trial_index": trial_index,
+                "clip_id": clip_id,
+                "rest_hr_samples": int((trial_rows["phase"] == "rest").sum()) if not trial_rows.empty else 0,
+                "listen_hr_samples": int((trial_rows["phase"] == "listen").sum()) if not trial_rows.empty else 0,
+            }
+        )
+    return pd.DataFrame(summary_rows)
 
 
 def write_label_row(row: dict[str, object], path: Path) -> None:
@@ -251,13 +283,18 @@ def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
     st.cache_data.clear()
 
 
-def open_sensor_reader() -> MockSensorReader | ArduinoSerialReader:
+def open_sensor_reader() -> MockSensorReader | SerialSensorReader:
     source = st.session_state.get("sensor_source", "Mock sensor")
-    if source == "Arduino USB":
+    if source == "Raspberry Pi Seeed GSR serial":
         port = st.session_state.get("serial_port", "")
         if not port:
-            raise RuntimeError("Select an Arduino serial port before recording.")
-        return ArduinoSerialReader(port=port, baud_rate=int(st.session_state.get("baud_rate", 115200)))
+            raise RuntimeError("Select the Raspberry Pi serial port before recording.")
+        return SerialSensorReader(
+            port=port,
+            baud_rate=int(st.session_state.get("baud_rate", 115200)),
+            source="raspberry_pi_seeed_gsr",
+            single_value_metric="eda",
+        )
     return MockSensorReader()
 
 
@@ -325,7 +362,7 @@ def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None
     stage = st.session_state.get("stage", "rest")
     prev_col, center_col, next_col = st.columns([1, 2, 1])
     with prev_col:
-        if st.button("← Previous", disabled=st.session_state.trial_position == 0, width="stretch"):
+        if full_width_button("← Previous", disabled=st.session_state.trial_position == 0):
             move_trial(-1)
             st.rerun()
     with center_col:
@@ -335,7 +372,7 @@ def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None
         )
     with next_col:
         label = "Finish" if is_last else "Next →"
-        if st.button(label, disabled=is_last and stage != "rate", width="stretch"):
+        if full_width_button(label, disabled=is_last and stage != "rate"):
             if stage == "rate":
                 save_current_rating(clip, labels)
             if is_last:
@@ -360,8 +397,8 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
 
     stage = st.session_state.get("stage", "rest")
     if stage == "rest":
-        st.info("Rest quietly for 30 seconds. HR and EDA samples will be saved as the baseline phase.")
-        if st.button("Record 30s rest baseline", width="stretch"):
+        st.info("Rest quietly for 30 seconds. Raspberry Pi Seeed GSR samples are saved now; Apple Watch HR can be imported after the run.")
+        if full_width_button("Record 30s rest baseline"):
             try:
                 start_time, end_time, sample_count = capture_sensor_phase(
                     phase="rest",
@@ -382,7 +419,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
     if stage == "listen":
         st.audio(str(clip["preview_url"]))
         st.info("Click once to start the preview and sensor recording together.")
-        if st.button("Start song + record sensors", width="stretch"):
+        if full_width_button("Start song + record sensors"):
             st.session_state.stage = "recording"
             st.rerun()
         return
@@ -463,7 +500,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
         )
         return
 
-    if st.button("Reset this trial", width="stretch"):
+    if full_width_button("Reset this trial"):
         reset_trial_state(stage="rest")
         st.rerun()
 
@@ -472,7 +509,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
 
 def render_sensor_panel(clip_id: str, trial_index: int) -> None:
     st.subheader("Sensor Recording")
-    st.caption("Raw HR and EDA samples are saved during the rest and listen phases.")
+    st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV rows can be imported into the same file after the run.")
     sensor_file = sensor_path(st.session_state.session_id)
     st.code(str(sensor_file.relative_to(Path.cwd())), language="text")
 
@@ -514,23 +551,90 @@ def render_sensor_panel(clip_id: str, trial_index: int) -> None:
 
 
 def render_sensor_setup() -> tuple[str, str, int]:
-    sensor_source = st.radio("Sensor source", ["Mock sensor", "Arduino USB"], horizontal=True)
+    sensor_source = st.radio("Sensor source", ["Mock sensor", "Raspberry Pi Seeed GSR serial"], horizontal=True)
     serial_port = ""
     baud_rate = 115200
 
-    if sensor_source == "Arduino USB":
+    if sensor_source == "Raspberry Pi Seeed GSR serial":
         ports = list_serial_ports()
         if ports:
-            serial_port = st.selectbox("Arduino serial port", ports)
+            serial_port = st.selectbox("Raspberry Pi serial port", ports)
         else:
-            st.warning("No serial ports found. Plug in the Arduino, then reload.")
-            serial_port = st.text_input("Manual serial port", value="/dev/cu.usbmodem")
+            st.warning("No serial ports found. Connect the Raspberry Pi serial output, then reload.")
+            serial_port = st.text_input("Manual serial port", value="/dev/cu.usbserial")
         baud_rate = int(st.number_input("Baud rate", min_value=1200, max_value=2000000, value=115200, step=9600))
-        st.caption("Accepted Arduino line formats: `HR:72,EDA:1.42`, `72,1.42`, or JSON like `{\"hr\":72,\"eda\":1.42}`.")
+        st.caption("Accepted Seeed GSR formats: `GSR:1.42`, `EDA:1.42`, `1.42`, or JSON like `{\"gsr\":1.42}`. Apple Watch HR is imported from CSV later.")
     else:
         st.caption("Mock sensor generates plausible HR and EDA values so the training flow can be tested without hardware.")
 
     return sensor_source, serial_port, baud_rate
+
+
+def render_apple_watch_start_instructions() -> None:
+    st.info(
+        "Before you begin: start an Apple Watch Workout and keep it running for the full BioBeat session. "
+        "After the last song, export heart-rate data as a CSV and upload it on the completion screen."
+    )
+
+
+def render_apple_watch_import(labels: pd.DataFrame) -> None:
+    st.subheader("Apple Watch Heart Rate Upload")
+    st.caption(
+        "Upload the heart-rate CSV after finishing the session. BioBeat syncs it by matching Apple Watch timestamps "
+        "to each recorded rest and song window."
+    )
+
+    session_labels = session_label_rows(labels, st.session_state.user_id, st.session_state.session_id)
+    if session_labels.empty:
+        st.warning("No saved ratings/windows were found for this session yet.")
+        return
+
+    uploaded = st.file_uploader("Upload Apple Watch / Apple Health heart-rate CSV", type=["csv"])
+    offset = st.number_input(
+        "Time offset seconds",
+        value=0.0,
+        step=1.0,
+        help="Use this only if the CSV timestamps look shifted from the dashboard timestamps.",
+    )
+    replace_prior = st.checkbox("Replace previous Apple Watch import for this session", value=True)
+
+    if uploaded is None:
+        st.info("Upload the exported HR CSV here when the session is done.")
+        return
+
+    try:
+        health = pd.read_csv(uploaded)
+        rows = build_hr_rows_from_frames(
+            health=health,
+            labels=session_labels,
+            source=APPLE_WATCH_SOURCE,
+            time_offset_seconds=float(offset),
+        )
+    except Exception as exc:
+        st.error(str(exc))
+        return
+
+    coverage = summarize_hr_rows(rows, session_labels)
+    st.dataframe(coverage, hide_index=True)
+
+    missing = coverage[(coverage["rest_hr_samples"] == 0) | (coverage["listen_hr_samples"] == 0)]
+    if missing.empty:
+        st.success(f"Ready to import {len(rows)} HR samples. Every song has rest and listen HR coverage.")
+    else:
+        st.warning(
+            f"Ready to import {len(rows)} HR samples, but {len(missing)} song(s) have a rest or listen window with no HR samples. "
+            "If that seems wrong, adjust the time offset and check the table again."
+        )
+
+    if full_width_button("Import Apple Watch HR", disabled=len(rows) == 0):
+        write_imported_rows(
+            sensor_path(st.session_state.session_id),
+            rows,
+            source=APPLE_WATCH_SOURCE,
+            replace_source=replace_prior,
+        )
+        st.cache_data.clear()
+        st.success(f"Imported {len(rows)} Apple Watch HR rows into {sensor_path(st.session_state.session_id).relative_to(Path.cwd())}.")
 
 
 def main() -> None:
@@ -551,7 +655,9 @@ def main() -> None:
         user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
         session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
         sensor_source, serial_port, baud_rate = render_sensor_setup()
-        if st.button("Begin / restart session", disabled=not user_id.strip() or not session_id.strip(), width="stretch"):
+        st.divider()
+        st.caption("Apple Watch: start a Workout before clicking Begin, then upload the HR CSV after the session.")
+        if full_width_button("Begin / restart session", disabled=not user_id.strip() or not session_id.strip()):
             initialize_collection(
                 clips,
                 user_id=user_id.strip(),
@@ -567,12 +673,14 @@ def main() -> None:
             st.caption(f"Sensors: `{sensor_path(st.session_state.session_id).relative_to(Path.cwd())}`")
 
     if not st.session_state.get("collection_started"):
-        st.info("Enter a user ID/session ID, choose mock or Arduino USB sensors, then begin.")
+        render_apple_watch_start_instructions()
+        st.info("Enter a user ID/session ID, choose mock or Raspberry Pi Seeed GSR serial, then begin.")
         st.stop()
 
     total = len(st.session_state.order)
     if st.session_state.get("stage") == "complete":
-        st.success("Session complete. Labels and raw sensor samples were saved incrementally.")
+        st.success("Session complete. Labels and raw GSR samples were saved incrementally.")
+        render_apple_watch_import(labels)
         st.stop()
 
     clip = current_clip(clips)

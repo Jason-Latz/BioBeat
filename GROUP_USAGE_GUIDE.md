@@ -5,7 +5,7 @@ This is the practical guide for using BioBeat right now.
 There are basically two jobs:
 
 1. Jason runs the music/rating/training pipeline.
-2. The sensor team gets Arduino HR/EDA values streaming over USB.
+2. The sensor team gets Seeed GSR/EDA values streaming from the Raspberry Pi over serial while Jason imports Apple Watch HR from CSV after the run.
 
 Everything else is just files and commands.
 
@@ -17,7 +17,7 @@ For each song it:
 
 1. Records 30 seconds of rest/baseline sensor data.
 2. Plays a 30-second iTunes preview.
-3. Records HR/EDA during the song.
+3. Records GSR/EDA during the song and leaves room for Apple Watch HR to be imported later.
 4. Asks you to rate how you felt.
 5. Saves the labels and raw sensor samples.
 
@@ -103,16 +103,18 @@ http://localhost:8501
 
 Then:
 
-1. Enter a `user_id`, like `jason`.
-2. Enter a `session_id`, like `jason_s01`.
-3. Choose `Mock sensor` if hardware is not ready.
-4. Choose `Arduino USB` if the sensor team has the Arduino plugged in.
-5. Click `Begin / restart session`.
-6. For each song:
+1. Start an Apple Watch Workout and keep it running for the full BioBeat session.
+2. Enter a `user_id`, like `jason`.
+3. Enter a `session_id`, like `jason_s01`.
+4. Choose `Mock sensor` if hardware is not ready.
+5. Choose `Raspberry Pi Seeed GSR serial` if the sensor team has the Pi serial stream connected.
+6. Click `Begin / restart session`.
+7. For each song:
    - record 30 seconds of rest
    - click `Start song + record sensors`
-   - the app starts the song preview and records 30 seconds of song response
+   - the app starts the song preview and records 30 seconds of song GSR response
    - rate the song, then click `Next` to save and move on
+8. Stop the Apple Watch Workout after the last song, export heart-rate data as CSV, and upload it on the completion screen.
 
 The app saves as you go.
 
@@ -179,24 +181,24 @@ For a class demo, one or two full self-runs is a reasonable starting point.
 
 ## Sensor Team Instructions
 
-The Arduino should print one HR/EDA sample per line over USB serial.
+The Raspberry Pi should print one Seeed GSR/EDA sample per line over serial.
 
 Preferred format:
 
 ```text
-HR:72,EDA:1.42
+GSR:1.42
 ```
 
 Also accepted:
 
 ```text
-72,1.42
-{"hr":72,"eda":1.42}
+EDA:1.42
+1.42
+{"gsr":1.42}
 ```
 
 Use:
 
-- HR in beats per minute
 - EDA/GSR in one consistent unit
 - a steady sample rate if possible
 
@@ -205,6 +207,24 @@ The dashboard records these lines into:
 ```text
 data/raw/sensor/{session_id}_sensor.csv
 ```
+
+## Apple Watch HR Import
+
+Apple Watch heart rate is not treated as a live serial sensor. After a collection session, export heart-rate samples from Apple Health or a Health export app as CSV, then upload the CSV on the dashboard completion screen. The app previews how many HR samples matched each rest/listen window before importing.
+
+You can also import from the command line:
+
+```bash
+python src/sensors/import_apple_watch_hr.py --health-csv path/to/apple_watch_hr.csv --labels-file data/raw/labels/jason_s01_labels.csv
+```
+
+The importer finds a timestamp column and an HR/BPM/value column, matches samples to each rest/listen window, and writes HR-only rows into:
+
+```text
+data/raw/sensor/{session_id}_sensor.csv
+```
+
+If the Health CSV clock is offset from the dashboard clock, add `--time-offset-seconds`.
 
 ## Train The Model
 
@@ -272,7 +292,7 @@ Commit source code, docs, song lists, selected clip metadata, and non-private de
 The clean story is:
 
 1. BioBeat plays short music previews.
-2. It records rest and song HR/EDA.
+2. It records rest/song GSR and imports Apple Watch HR.
 3. It asks for self-report ratings.
 4. It extracts audio and biometric features.
 5. It trains simple models, especially for arousal.
