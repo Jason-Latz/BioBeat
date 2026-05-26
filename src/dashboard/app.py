@@ -232,7 +232,7 @@ def main() -> None:
                 ]
             ),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
 

@@ -16,3 +16,5 @@ Do not leave that learning only in chat history.
 ## Learned Rules
 
 - Prefer many small, narrowly scoped commits for BioBeat implementation and GitHub publishing work.
+- In Streamlit code, use `width="stretch"` instead of deprecated `use_container_width=True`.
+- Cache-only data generation runs should not rewrite existing generated CSVs.

@@ -136,6 +136,7 @@ def extract_all_features(
     existing = load_existing_features(output_path)
     completed_clip_ids = set(existing["clip_id"].astype(str)) if not existing.empty and not force else set()
     rows = [] if force else existing.to_dict("records")
+    processed_any = False
 
     if limit is not None:
         clips = clips.head(limit)
@@ -154,10 +155,11 @@ def extract_all_features(
             continue
 
         rows.append({"clip_id": clip_id, **features})
+        processed_any = True
         write_feature_rows(output_path, rows)
 
     result = pd.DataFrame(rows)
-    if not result.empty:
+    if not result.empty and (force or processed_any or not output_path.exists()):
         result = result.reindex(columns=FEATURE_COLUMNS)
         result.to_csv(output_path, index=False)
     return result

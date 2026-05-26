@@ -112,7 +112,7 @@ def main() -> None:
         user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
         session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
         start_disabled = not user_id.strip() or not session_id.strip()
-        if st.button("Start", disabled=start_disabled, use_container_width=True):
+        if st.button("Start", disabled=start_disabled, width="stretch"):
             initialize_session(clips, user_id.strip(), session_id.strip())
 
         if st.session_state.get("started"):
@@ -136,7 +136,7 @@ def main() -> None:
     st.write(f"**{clip['track_name']}**")
     st.write(str(clip["artist"]))
 
-    if st.button("Start clip", disabled=st.session_state.trial_active, use_container_width=True):
+    if st.button("Start clip", disabled=st.session_state.trial_active, width="stretch"):
         st.session_state.clip_start_time = iso_now()
         st.session_state.trial_active = True
 
