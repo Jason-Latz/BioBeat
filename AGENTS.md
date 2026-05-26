@@ -25,3 +25,4 @@ Do not leave that learning only in chat history.
 - Documentation should assume Jason runs the app/training pipeline and the sensor teammates only handle hardware/Arduino output; keep guides concise and human-readable.
 - Rating UI should explain that valence is the numeric positive/negative model label and mood is only an optional human-readable tag.
 - BioBeat collection UI should use one explicit control to start song playback and sensor capture together; avoid separate manual play/record steps when possible.
+- Split BioBeat commits by purpose even for small follow-ups: separate source data edits, generated artifact updates, docs, and tooling/instruction changes.
