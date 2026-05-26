@@ -140,6 +140,27 @@ def write_label_row(row: dict[str, object], path: Path) -> None:
         writer.writerows(rows)
 
 
+def rating_key(clip_id: str, field: str) -> str:
+    return f"rating_{clip_id}_{field}"
+
+
+def saved_field(saved: pd.Series | None, field: str, default: object = "") -> object:
+    if saved is None or field not in saved or pd.isna(saved.get(field)):
+        return default
+    value = saved.get(field)
+    if isinstance(value, str) and not value.strip():
+        return default
+    return value
+
+
+def saved_int(saved: pd.Series | None, field: str, default: int) -> int:
+    value = saved_field(saved, field, default)
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
 def session_label_rows(labels: pd.DataFrame, user_id: str, session_id: str) -> pd.DataFrame:
     if labels.empty:
         return pd.DataFrame(columns=LABEL_COLUMNS)
@@ -200,6 +221,34 @@ def move_trial(delta: int) -> None:
     next_position = st.session_state.trial_position + delta
     st.session_state.trial_position = max(0, min(next_position, len(st.session_state.order) - 1))
     reset_trial_state(stage="rest")
+
+
+def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
+    user_id = st.session_state.user_id
+    session_id = st.session_state.session_id
+    clip_id = str(clip["clip_id"])
+    trial_index = int(st.session_state.trial_position + 1)
+    saved = existing_label(labels, user_id, session_id, clip_id)
+    mood = str(st.session_state.get(rating_key(clip_id, "mood"), saved_field(saved, "mood", "neutral")))
+    other_mood = str(st.session_state.get(rating_key(clip_id, "other_mood"), "")).strip()
+    row = {
+        "user_id": user_id,
+        "session_id": session_id,
+        "clip_id": clip_id,
+        "trial_index": trial_index,
+        "rest_start_time": st.session_state.rest_start_time or saved_field(saved, "rest_start_time", ""),
+        "rest_end_time": st.session_state.rest_end_time or saved_field(saved, "rest_end_time", ""),
+        "clip_start_time": st.session_state.clip_start_time or saved_field(saved, "clip_start_time", iso_now()),
+        "clip_end_time": st.session_state.clip_end_time or saved_field(saved, "clip_end_time", iso_now()),
+        "preference": int(st.session_state.get(rating_key(clip_id, "preference"), saved_int(saved, "preference", 3))),
+        "arousal": int(st.session_state.get(rating_key(clip_id, "arousal"), saved_int(saved, "arousal", 3))),
+        "valence": int(st.session_state.get(rating_key(clip_id, "valence"), saved_int(saved, "valence", 3))),
+        "mood": other_mood if mood == "other" and other_mood else mood,
+        "familiarity": int(st.session_state.get(rating_key(clip_id, "familiarity"), saved_int(saved, "familiarity", 3))),
+        "notes": str(st.session_state.get(rating_key(clip_id, "notes"), saved_field(saved, "notes", ""))).strip(),
+    }
+    write_label_row(row, label_path(session_id))
+    st.cache_data.clear()
 
 
 def open_sensor_reader() -> MockSensorReader | ArduinoSerialReader:
@@ -271,7 +320,9 @@ def capture_sensor_phase(
         reader.close()
 
 
-def render_navigation(total: int) -> None:
+def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None:
+    is_last = st.session_state.trial_position >= total - 1
+    stage = st.session_state.get("stage", "rest")
     prev_col, center_col, next_col = st.columns([1, 2, 1])
     with prev_col:
         if st.button("← Previous", disabled=st.session_state.trial_position == 0, width="stretch"):
@@ -283,8 +334,14 @@ def render_navigation(total: int) -> None:
             text=f"Song {st.session_state.trial_position + 1} of {total}",
         )
     with next_col:
-        if st.button("Next →", disabled=st.session_state.trial_position >= total - 1, width="stretch"):
-            move_trial(1)
+        label = "Finish" if is_last else "Next →"
+        if st.button(label, disabled=is_last and stage != "rate", width="stretch"):
+            if stage == "rate":
+                save_current_rating(clip, labels)
+            if is_last:
+                st.session_state.stage = "complete"
+            else:
+                move_trial(1)
             st.rerun()
 
 
@@ -353,70 +410,57 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
     if stage == "rate":
         default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
         st.subheader("Rate this song")
-        st.caption("The numeric sliders are the training labels. The mood tag is optional context for humans.")
-        with st.form("rating_form"):
-            preference = st.slider(
-                "Preference",
-                1,
-                5,
-                int(saved["preference"]) if saved is not None and str(saved["preference"]).strip() else 3,
-                help="1 = disliked it, 5 = liked it a lot",
+        st.caption("Adjust the sliders, then click Next. The numeric sliders are the training labels.")
+        st.slider(
+            "Preference",
+            1,
+            5,
+            saved_int(saved, "preference", 3),
+            help="1 = disliked it, 5 = liked it a lot",
+            key=rating_key(clip_id, "preference"),
+        )
+        st.slider(
+            "Arousal",
+            1,
+            5,
+            saved_int(saved, "arousal", 3),
+            help="1 = calm/sleepy, 5 = energized/hyped",
+            key=rating_key(clip_id, "arousal"),
+        )
+        st.slider(
+            "Valence",
+            1,
+            5,
+            saved_int(saved, "valence", 3),
+            help="1 = negative/unpleasant/sad, 5 = positive/pleasant/happy",
+            key=rating_key(clip_id, "valence"),
+        )
+        mood = st.selectbox(
+            "Mood tag (optional)",
+            MOOD_OPTIONS,
+            index=MOOD_OPTIONS.index(default_mood),
+            help="A human-readable tag for notes/demo. The model primarily uses the numeric ratings.",
+            key=rating_key(clip_id, "mood"),
+        )
+        if mood == "other":
+            st.text_input(
+                "Mood detail",
+                value=str(saved_field(saved, "mood", "")) if default_mood == "other" else "",
+                key=rating_key(clip_id, "other_mood"),
             )
-            arousal = st.slider(
-                "Arousal",
-                1,
-                5,
-                int(saved["arousal"]) if saved is not None and str(saved["arousal"]).strip() else 3,
-                help="1 = calm/sleepy, 5 = energized/hyped",
-            )
-            valence = st.slider(
-                "Valence",
-                1,
-                5,
-                int(saved["valence"]) if saved is not None and str(saved["valence"]).strip() else 3,
-                help="1 = negative/unpleasant/sad, 5 = positive/pleasant/happy",
-            )
-            mood = st.selectbox(
-                "Mood tag (optional)",
-                MOOD_OPTIONS,
-                index=MOOD_OPTIONS.index(default_mood),
-                help="A human-readable tag for notes/demo. The model primarily uses the numeric ratings.",
-            )
-            other_mood = st.text_input("Mood detail") if mood == "other" else ""
-            familiarity = st.slider(
-                "Familiarity",
-                1,
-                5,
-                int(saved["familiarity"]) if saved is not None and str(saved["familiarity"]).strip() else 3,
-                help="1 = unfamiliar, 5 = very familiar",
-            )
-            notes = st.text_area("Notes", value="" if saved is None or pd.isna(saved.get("notes", "")) else str(saved["notes"]))
-            submitted = st.form_submit_button("Save rating")
-
-        if submitted:
-            row = {
-                "user_id": user_id,
-                "session_id": session_id,
-                "clip_id": clip_id,
-                "trial_index": trial_index,
-                "rest_start_time": st.session_state.rest_start_time or "",
-                "rest_end_time": st.session_state.rest_end_time or "",
-                "clip_start_time": st.session_state.clip_start_time or iso_now(),
-                "clip_end_time": st.session_state.clip_end_time or iso_now(),
-                "preference": preference,
-                "arousal": arousal,
-                "valence": valence,
-                "mood": other_mood.strip() if mood == "other" and other_mood.strip() else mood,
-                "familiarity": familiarity,
-                "notes": notes.strip(),
-            }
-            write_label_row(row, label_path(session_id))
-            st.cache_data.clear()
-            if st.session_state.trial_position < len(st.session_state.order) - 1:
-                move_trial(1)
-            else:
-                st.session_state.stage = "complete"
-            st.rerun()
+        st.slider(
+            "Familiarity",
+            1,
+            5,
+            saved_int(saved, "familiarity", 3),
+            help="1 = unfamiliar, 5 = very familiar",
+            key=rating_key(clip_id, "familiarity"),
+        )
+        st.text_area(
+            "Notes",
+            value=str(saved_field(saved, "notes", "")),
+            key=rating_key(clip_id, "notes"),
+        )
         return
 
     if st.button("Reset this trial", width="stretch"):
@@ -527,14 +571,14 @@ def main() -> None:
         st.stop()
 
     total = len(st.session_state.order)
-    render_navigation(total)
-
     if st.session_state.get("stage") == "complete":
         st.success("Session complete. Labels and raw sensor samples were saved incrementally.")
         st.stop()
 
     clip = current_clip(clips)
     trial_index = int(st.session_state.trial_position + 1)
+    render_navigation(total, clip, labels)
+
     session_rows = session_label_rows(labels, st.session_state.user_id, st.session_state.session_id)
     completed = session_rows["clip_id"].nunique() if not session_rows.empty else 0
     st.caption(f"Saved ratings: {completed} of {total}")
