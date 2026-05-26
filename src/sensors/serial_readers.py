@@ -33,7 +33,14 @@ def list_serial_ports() -> list[str]:
         from serial.tools import list_ports
     except ImportError:
         return []
-    return [port.device for port in list_ports.comports()]
+    devices = [port.device for port in list_ports.comports()]
+    preferred = [
+        device
+        for device in devices
+        if "bluetooth" not in device.lower() and "debug-console" not in device.lower()
+    ]
+    visible_devices = preferred or devices
+    return sorted(visible_devices, key=lambda device: (not device.startswith("/dev/cu.usb"), device))
 
 
 def _float_or_none(value: object) -> float | None:

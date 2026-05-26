@@ -30,3 +30,4 @@ Do not leave that learning only in chat history.
 - When adding BioBeat songs for training, favor genre diversity and keep batches small enough that self-collection sessions remain practical.
 - BioBeat recording code and docs should refer to Seeed GSR/EDA serial input from a Raspberry Pi, not Arduino, and should allow HR and EDA to arrive as separate raw sensor rows.
 - BioBeat dashboard should instruct users to start an Apple Watch Workout before collection and provide a clear end-of-session Apple Watch HR CSV upload/import step with per-song sync coverage.
+- BioBeat serial setup should prioritize real USB serial devices such as `/dev/cu.usbmodem*` and avoid defaulting to Mac Bluetooth/debug console ports.
