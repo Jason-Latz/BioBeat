@@ -22,6 +22,7 @@ class SensorSample:
     eda: float | None
     source: str
     raw_line: str = ""
+    sensor_elapsed_ms: float | None = None
 
 
 def iso_now() -> str:
@@ -59,6 +60,7 @@ def _sample_from_mapping(values: dict[str, object], raw_line: str, source: str) 
     normalized = {str(key).strip().lower(): value for key, value in values.items()}
     hr = None
     eda = None
+    sensor_elapsed_ms = None
 
     for key in ("hr", "heart_rate", "heartrate", "bpm", "pulse"):
         hr = _float_or_none(normalized.get(key))
@@ -70,9 +72,21 @@ def _sample_from_mapping(values: dict[str, object], raw_line: str, source: str) 
         if eda is not None:
             break
 
+    for key in ("elapsed_ms", "sensor_elapsed_ms", "time_ms", "millis", "milliseconds", "ms"):
+        sensor_elapsed_ms = _float_or_none(normalized.get(key))
+        if sensor_elapsed_ms is not None:
+            break
+
     if hr is None and eda is None:
         return None
-    return SensorSample(timestamp=iso_now(), hr=hr, eda=eda, source=source, raw_line=raw_line)
+    return SensorSample(
+        timestamp=iso_now(),
+        hr=hr,
+        eda=eda,
+        source=source,
+        raw_line=raw_line,
+        sensor_elapsed_ms=sensor_elapsed_ms,
+    )
 
 
 def parse_sensor_line(
@@ -98,8 +112,21 @@ def parse_sensor_line(
 
     csv_values = next(csv.reader([raw_line]))
     if len(csv_values) >= 2:
-        hr = _float_or_none(csv_values[0])
-        eda = _float_or_none(csv_values[1])
+        first = _float_or_none(csv_values[0])
+        second = _float_or_none(csv_values[1])
+        if single_value_metric is not None:
+            if second is not None:
+                return SensorSample(
+                    timestamp=iso_now(),
+                    hr=second if single_value_metric == "hr" else None,
+                    eda=second if single_value_metric == "eda" else None,
+                    source=source,
+                    raw_line=raw_line,
+                    sensor_elapsed_ms=first,
+                )
+            return None
+        hr = first
+        eda = second
         if hr is not None or eda is not None:
             return SensorSample(timestamp=iso_now(), hr=hr, eda=eda, source=source, raw_line=raw_line)
 
@@ -192,6 +219,7 @@ def sample_to_row(
         "phase": phase,
         "hr": sample.hr,
         "eda": sample.eda,
+        "sensor_elapsed_ms": sample.sensor_elapsed_ms,
         "source": sample.source,
         "raw_line": sample.raw_line,
     }
@@ -212,6 +240,7 @@ def append_sensor_rows(path: Path, rows: Iterable[dict[str, object]]) -> None:
         "phase",
         "hr",
         "eda",
+        "sensor_elapsed_ms",
         "source",
         "raw_line",
     ]

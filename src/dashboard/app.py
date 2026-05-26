@@ -54,6 +54,7 @@ SENSOR_COLUMNS = [
     "phase",
     "hr",
     "eda",
+    "sensor_elapsed_ms",
     "source",
     "raw_line",
 ]
@@ -121,7 +122,11 @@ def load_labels(labels_dir: Path) -> pd.DataFrame:
 
 
 def load_sensor_rows(session_id: str) -> pd.DataFrame:
-    return read_csv_if_exists(sensor_path(session_id), SENSOR_COLUMNS)
+    rows = read_csv_if_exists(sensor_path(session_id), SENSOR_COLUMNS)
+    for column in SENSOR_COLUMNS:
+        if column not in rows.columns:
+            rows[column] = ""
+    return rows[SENSOR_COLUMNS]
 
 
 def summarize_hr_rows(rows: list[dict[str, object]], labels: pd.DataFrame) -> pd.DataFrame:
@@ -314,7 +319,7 @@ def capture_sensor_phase(
     latest = st.empty()
     hr_chart = st.empty()
     eda_chart = st.empty()
-    sample_frame = pd.DataFrame(columns=["elapsed_sec", "hr", "eda"])
+    sample_frame = pd.DataFrame(columns=["elapsed_sec", "hr", "eda", "sensor_elapsed_ms"])
 
     try:
         while True:
@@ -337,11 +342,15 @@ def capture_sensor_phase(
                     "elapsed_sec": round(elapsed, 2),
                     "hr": sample.hr,
                     "eda": sample.eda,
+                    "sensor_elapsed_ms": sample.sensor_elapsed_ms,
                 }
 
                 hr_text = "--" if sample.hr is None else f"{sample.hr:.1f} bpm"
                 eda_text = "--" if sample.eda is None else f"{sample.eda:.3f}"
-                latest.metric("Latest sample", f"HR {hr_text} / EDA {eda_text}")
+                if sample.hr is None and sample.sensor_elapsed_ms is not None:
+                    latest.metric("Latest GSR sample", f"EDA {eda_text}", f"{sample.sensor_elapsed_ms:.0f} ms")
+                else:
+                    latest.metric("Latest sample", f"HR {hr_text} / EDA {eda_text}")
                 if sample_frame["hr"].notna().any():
                     hr_chart.line_chart(sample_frame[["elapsed_sec", "hr"]].dropna().set_index("elapsed_sec"), height=180)
                 if sample_frame["eda"].notna().any():

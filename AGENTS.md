@@ -31,3 +31,4 @@ Do not leave that learning only in chat history.
 - BioBeat recording code and docs should refer to Seeed GSR/EDA serial input from a Raspberry Pi, not Arduino, and should allow HR and EDA to arrive as separate raw sensor rows.
 - BioBeat dashboard should instruct users to start an Apple Watch Workout before collection and provide a clear end-of-session Apple Watch HR CSV upload/import step with per-song sync coverage.
 - BioBeat serial setup should prioritize real USB serial devices such as `/dev/cu.usbmodem*` and avoid defaulting to Mac Bluetooth/debug console ports.
+- Seeed GSR serial lines may send `milliseconds_since_start,eda`; store the first value as `sensor_elapsed_ms` and never display or treat it as heart rate.

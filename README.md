@@ -42,7 +42,7 @@ EDA:1.42
 {"gsr":1.42}
 ```
 
-Apple Watch HR is imported at the end of the dashboard session from a CSV exported from Apple Health or a Health export app. The upload panel matches HR timestamps to the rest/listen windows in the labels file, previews per-song HR sample coverage, then appends HR-only rows to the same raw sensor CSV. The command-line importer is still available for repeat imports or debugging.
+Apple Watch HR is imported at the end of the dashboard session from a CSV exported from Apple Health or a Health export app. The upload panel matches HR timestamps to the rest/listen windows in the labels file, previews per-song HR sample coverage, then appends HR-only rows to the same raw sensor CSV. If the Seeed stream includes milliseconds since sensor start, BioBeat stores that as `sensor_elapsed_ms`; Apple Watch sync still uses the dashboard's wall-clock timestamps.
 
 For a fully local demo without collecting labels by hand, generate synthetic labels first:
 

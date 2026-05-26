@@ -194,6 +194,7 @@ Also accepted:
 ```text
 EDA:1.42
 1.42
+1234,1.42
 {"gsr":1.42}
 ```
 
@@ -201,6 +202,7 @@ Use:
 
 - EDA/GSR in one consistent unit
 - a steady sample rate if possible
+- if sending `milliseconds,gsr`, the first value is stored as `sensor_elapsed_ms`, not HR
 
 The dashboard records these lines into:
 

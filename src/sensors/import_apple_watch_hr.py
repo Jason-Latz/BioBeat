@@ -22,6 +22,7 @@ SENSOR_COLUMNS = [
     "phase",
     "hr",
     "eda",
+    "sensor_elapsed_ms",
     "source",
     "raw_line",
 ]
@@ -127,6 +128,7 @@ def build_hr_rows_from_frames(
                         "phase": phase,
                         "hr": round(float(sample["_hr"]), 3),
                         "eda": "",
+                        "sensor_elapsed_ms": "",
                         "source": source,
                         "raw_line": f"{time_column}={sample[time_column]},{hr_column}={sample[hr_column]}",
                     }
