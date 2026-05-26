@@ -112,7 +112,7 @@ Then:
    - record 30 seconds of rest
    - click `Start song + record sensors`
    - the app starts the song preview and records 30 seconds of song response
-   - rate the song
+   - rate the song, then click `Next` to save and move on
 
 The app saves as you go.
 
