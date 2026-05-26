@@ -110,8 +110,8 @@ Then:
 5. Click `Begin / restart session`.
 6. For each song:
    - record 30 seconds of rest
-   - press play on the song preview
-   - record 30 seconds of song response
+   - click `Start song + record sensors`
+   - the app starts the song preview and records 30 seconds of song response
    - rate the song
 
 The app saves as you go.
@@ -155,6 +155,8 @@ Valence is not the same as arousal. A song can be:
 - high arousal, negative valence: tense or stressful
 
 For the project, arousal is the main target because HR and EDA are most directly related to activation. Valence is secondary and harder to predict, but it helps separate “calm and pleasant” from “calm and sad.”
+
+`mood` is different from valence. Mood is just an optional human-readable tag, like `sad`, `relaxed`, or `excited`. Valence is the numeric training label. If you are unsure, trust the valence slider and pick the closest mood tag.
 
 ## Do You Need To Rate The Songs Yourself?
 

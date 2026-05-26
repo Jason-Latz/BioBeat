@@ -324,85 +324,106 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
 
     if stage == "listen":
         st.audio(str(clip["preview_url"]))
-        st.info("Press play on the preview, then immediately click the button below to record the 30-second music response.")
-        if st.button("Record 30s song response", width="stretch"):
-            try:
-                start_time, end_time, sample_count = capture_sensor_phase(
-                    phase="listen",
-                    duration_seconds=LISTEN_SECONDS,
-                    clip_id=clip_id,
-                    trial_index=trial_index,
-                )
-            except Exception as exc:
-                st.error(str(exc))
-                return
-            st.session_state.clip_start_time = start_time
-            st.session_state.clip_end_time = end_time
-            st.session_state.listen_sample_count = sample_count
-            st.session_state.stage = "rate"
+        st.info("Click once to start the preview and sensor recording together.")
+        if st.button("Start song + record sensors", width="stretch"):
+            st.session_state.stage = "recording"
             st.rerun()
         return
 
-    default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
-    with st.form("rating_form"):
-        st.write("Rate the song you just heard.")
-        preference = st.slider(
-            "Preference",
-            1,
-            5,
-            int(saved["preference"]) if saved is not None and str(saved["preference"]).strip() else 3,
-            help="1 = dislike, 5 = like",
-        )
-        arousal = st.slider(
-            "Arousal",
-            1,
-            5,
-            int(saved["arousal"]) if saved is not None and str(saved["arousal"]).strip() else 3,
-            help="1 = calm, 5 = energized",
-        )
-        valence = st.slider(
-            "Valence",
-            1,
-            5,
-            int(saved["valence"]) if saved is not None and str(saved["valence"]).strip() else 3,
-            help="1 = negative, 5 = positive",
-        )
-        mood = st.selectbox("Mood", MOOD_OPTIONS, index=MOOD_OPTIONS.index(default_mood))
-        other_mood = st.text_input("Mood detail") if mood == "other" else ""
-        familiarity = st.slider(
-            "Familiarity",
-            1,
-            5,
-            int(saved["familiarity"]) if saved is not None and str(saved["familiarity"]).strip() else 3,
-            help="1 = unfamiliar, 5 = very familiar",
-        )
-        notes = st.text_area("Notes", value="" if saved is None or pd.isna(saved.get("notes", "")) else str(saved["notes"]))
-        submitted = st.form_submit_button("Save rating")
-
-    if submitted:
-        row = {
-            "user_id": user_id,
-            "session_id": session_id,
-            "clip_id": clip_id,
-            "trial_index": trial_index,
-            "rest_start_time": st.session_state.rest_start_time or "",
-            "rest_end_time": st.session_state.rest_end_time or "",
-            "clip_start_time": st.session_state.clip_start_time or iso_now(),
-            "clip_end_time": st.session_state.clip_end_time or iso_now(),
-            "preference": preference,
-            "arousal": arousal,
-            "valence": valence,
-            "mood": other_mood.strip() if mood == "other" and other_mood.strip() else mood,
-            "familiarity": familiarity,
-            "notes": notes.strip(),
-        }
-        write_label_row(row, label_path(session_id))
-        st.cache_data.clear()
-        if st.session_state.trial_position < len(st.session_state.order) - 1:
-            move_trial(1)
-        else:
-            st.session_state.stage = "complete"
+    if stage == "recording":
+        st.audio(str(clip["preview_url"]), autoplay=True)
+        st.info("Recording the 30-second song response. If your browser blocks autoplay, press play immediately.")
+        try:
+            start_time, end_time, sample_count = capture_sensor_phase(
+                phase="listen",
+                duration_seconds=LISTEN_SECONDS,
+                clip_id=clip_id,
+                trial_index=trial_index,
+            )
+        except Exception as exc:
+            st.session_state.stage = "listen"
+            st.error(str(exc))
+            return
+        st.session_state.clip_start_time = start_time
+        st.session_state.clip_end_time = end_time
+        st.session_state.listen_sample_count = sample_count
+        st.session_state.stage = "rate"
         st.rerun()
+
+    if stage == "rate":
+        default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
+        st.subheader("Rate this song")
+        st.caption("The numeric sliders are the training labels. The mood tag is optional context for humans.")
+        with st.form("rating_form"):
+            preference = st.slider(
+                "Preference",
+                1,
+                5,
+                int(saved["preference"]) if saved is not None and str(saved["preference"]).strip() else 3,
+                help="1 = disliked it, 5 = liked it a lot",
+            )
+            arousal = st.slider(
+                "Arousal",
+                1,
+                5,
+                int(saved["arousal"]) if saved is not None and str(saved["arousal"]).strip() else 3,
+                help="1 = calm/sleepy, 5 = energized/hyped",
+            )
+            valence = st.slider(
+                "Valence",
+                1,
+                5,
+                int(saved["valence"]) if saved is not None and str(saved["valence"]).strip() else 3,
+                help="1 = negative/unpleasant/sad, 5 = positive/pleasant/happy",
+            )
+            mood = st.selectbox(
+                "Mood tag (optional)",
+                MOOD_OPTIONS,
+                index=MOOD_OPTIONS.index(default_mood),
+                help="A human-readable tag for notes/demo. The model primarily uses the numeric ratings.",
+            )
+            other_mood = st.text_input("Mood detail") if mood == "other" else ""
+            familiarity = st.slider(
+                "Familiarity",
+                1,
+                5,
+                int(saved["familiarity"]) if saved is not None and str(saved["familiarity"]).strip() else 3,
+                help="1 = unfamiliar, 5 = very familiar",
+            )
+            notes = st.text_area("Notes", value="" if saved is None or pd.isna(saved.get("notes", "")) else str(saved["notes"]))
+            submitted = st.form_submit_button("Save rating")
+
+        if submitted:
+            row = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "clip_id": clip_id,
+                "trial_index": trial_index,
+                "rest_start_time": st.session_state.rest_start_time or "",
+                "rest_end_time": st.session_state.rest_end_time or "",
+                "clip_start_time": st.session_state.clip_start_time or iso_now(),
+                "clip_end_time": st.session_state.clip_end_time or iso_now(),
+                "preference": preference,
+                "arousal": arousal,
+                "valence": valence,
+                "mood": other_mood.strip() if mood == "other" and other_mood.strip() else mood,
+                "familiarity": familiarity,
+                "notes": notes.strip(),
+            }
+            write_label_row(row, label_path(session_id))
+            st.cache_data.clear()
+            if st.session_state.trial_position < len(st.session_state.order) - 1:
+                move_trial(1)
+            else:
+                st.session_state.stage = "complete"
+            st.rerun()
+        return
+
+    if st.button("Reset this trial", width="stretch"):
+        reset_trial_state(stage="rest")
+        st.rerun()
+
+    return
 
 
 def render_sensor_panel(clip_id: str, trial_index: int) -> None:

@@ -23,3 +23,5 @@ Do not leave that learning only in chat history.
 - For one-off Python validation commands, set `PYTHONPATH=src` before importing repo packages such as `sensors` or `features`.
 - After regenerating tracked CSV artifacts, normalize line endings or verify with `git diff --check`; CRLF output appears as trailing whitespace.
 - Documentation should assume Jason runs the app/training pipeline and the sensor teammates only handle hardware/Arduino output; keep guides concise and human-readable.
+- Rating UI should explain that valence is the numeric positive/negative model label and mood is only an optional human-readable tag.
+- BioBeat collection UI should use one explicit control to start song playback and sensor capture together; avoid separate manual play/record steps when possible.
