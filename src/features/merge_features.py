@@ -26,6 +26,8 @@ LABEL_COLUMNS = [
     "session_id",
     "clip_id",
     "trial_index",
+    "rest_start_time",
+    "rest_end_time",
     "clip_start_time",
     "clip_end_time",
     "preference",
@@ -46,9 +48,25 @@ def read_labels(labels_dir: Path) -> pd.DataFrame:
         )
     frames = [pd.read_csv(path) for path in paths]
     labels = pd.concat(frames, ignore_index=True)
-    missing = set(LABEL_COLUMNS) - set(labels.columns)
+    required = {
+        "user_id",
+        "session_id",
+        "clip_id",
+        "trial_index",
+        "clip_start_time",
+        "clip_end_time",
+        "preference",
+        "arousal",
+        "valence",
+        "mood",
+        "familiarity",
+    }
+    missing = required - set(labels.columns)
     if missing:
         raise ValueError(f"Label files are missing required columns: {', '.join(sorted(missing))}")
+    for column in LABEL_COLUMNS:
+        if column not in labels.columns:
+            labels[column] = ""
     return labels
 
 

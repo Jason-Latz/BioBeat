@@ -5,6 +5,7 @@ __pycache__/
 
 data/audio/
 data/tmp/
+data/raw/sensor/*_sensor.csv
 *.m4a
 *.mp3
 *.wav

@@ -19,6 +19,8 @@ LABEL_COLUMNS = [
     "session_id",
     "clip_id",
     "trial_index",
+    "rest_start_time",
+    "rest_end_time",
     "clip_start_time",
     "clip_end_time",
     "preference",
@@ -63,7 +65,9 @@ def generate_rows(clips: pd.DataFrame, user_id: str, session_id: str, seed: int)
 
     rows: list[dict[str, object]] = []
     for index, clip in order.iterrows():
-        trial_start = start + timedelta(minutes=index * 2)
+        rest_start = start + timedelta(minutes=index * 2)
+        rest_end = rest_start + timedelta(seconds=30, milliseconds=rng.randint(0, 300))
+        trial_start = rest_end + timedelta(seconds=2)
         trial_end = trial_start + timedelta(seconds=30, milliseconds=rng.randint(0, 700))
         intended_arousal = str(clip.get("intended_arousal", "medium")).lower()
         intended_valence = str(clip.get("intended_valence", "neutral")).lower()
@@ -82,6 +86,8 @@ def generate_rows(clips: pd.DataFrame, user_id: str, session_id: str, seed: int)
                 "session_id": session_id,
                 "clip_id": clip["clip_id"],
                 "trial_index": index + 1,
+                "rest_start_time": rest_start.isoformat(timespec="milliseconds"),
+                "rest_end_time": rest_end.isoformat(timespec="milliseconds"),
                 "clip_start_time": trial_start.isoformat(timespec="milliseconds"),
                 "clip_end_time": trial_end.isoformat(timespec="milliseconds"),
                 "preference": preference,

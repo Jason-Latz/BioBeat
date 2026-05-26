@@ -14,12 +14,13 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from biobeat_paths import (  # noqa: E402
-    CLIPS_CSV,
-    FAKE_BIOMETRICS_CSV,
-    LABELS_DIR,
-    RECOMMENDATIONS_CSV,
-    ensure_project_dirs,
+from biobeat_paths import CLIPS_CSV, LABELS_DIR, RAW_DIR, ensure_project_dirs  # noqa: E402
+from sensors.arduino_serial import (  # noqa: E402
+    ArduinoSerialReader,
+    MockSensorReader,
+    append_sensor_rows,
+    list_serial_ports,
+    sample_to_row,
 )
 
 
@@ -30,6 +31,8 @@ LABEL_COLUMNS = [
     "session_id",
     "clip_id",
     "trial_index",
+    "rest_start_time",
+    "rest_end_time",
     "clip_start_time",
     "clip_end_time",
     "preference",
@@ -38,6 +41,18 @@ LABEL_COLUMNS = [
     "mood",
     "familiarity",
     "notes",
+]
+SENSOR_COLUMNS = [
+    "timestamp",
+    "user_id",
+    "session_id",
+    "clip_id",
+    "trial_index",
+    "phase",
+    "hr",
+    "eda",
+    "source",
+    "raw_line",
 ]
 MOOD_OPTIONS = [
     "happy",
@@ -55,31 +70,49 @@ def iso_now() -> str:
     return datetime.now().isoformat(timespec="milliseconds")
 
 
-def read_csv_if_exists(path: Path) -> pd.DataFrame:
+def safe_file_id(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in value)
+
+
+def label_path(session_id: str) -> Path:
+    return LABELS_DIR / f"{safe_file_id(session_id)}_labels.csv"
+
+
+def sensor_path(session_id: str) -> Path:
+    return RAW_DIR / "sensor" / f"{safe_file_id(session_id)}_sensor.csv"
+
+
+def read_csv_if_exists(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
     if not path.exists():
-        return pd.DataFrame()
+        return pd.DataFrame(columns=columns)
     return pd.read_csv(path)
+
+
+@st.cache_data
+def load_clips(path: Path) -> pd.DataFrame:
+    clips = read_csv_if_exists(path)
+    required = {"clip_id", "track_name", "artist", "preview_url"}
+    missing = required - set(clips.columns)
+    if missing:
+        raise ValueError(f"{path} is missing required columns: {', '.join(sorted(missing))}")
+    return clips
 
 
 @st.cache_data
 def load_labels(labels_dir: Path) -> pd.DataFrame:
     paths = sorted(glob.glob(str(labels_dir / "*_labels.csv")))
     frames = [pd.read_csv(path) for path in paths]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=LABEL_COLUMNS)
+    if not frames:
+        return pd.DataFrame(columns=LABEL_COLUMNS)
+    labels = pd.concat(frames, ignore_index=True)
+    for column in LABEL_COLUMNS:
+        if column not in labels.columns:
+            labels[column] = ""
+    return labels[LABEL_COLUMNS]
 
 
-@st.cache_data
-def load_dashboard_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    clips = read_csv_if_exists(CLIPS_CSV)
-    labels = load_labels(LABELS_DIR)
-    biometrics = read_csv_if_exists(FAKE_BIOMETRICS_CSV)
-    recommendations = read_csv_if_exists(RECOMMENDATIONS_CSV)
-    return clips, labels, biometrics, recommendations
-
-
-def label_path(session_id: str) -> Path:
-    safe_session = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in session_id)
-    return LABELS_DIR / f"{safe_session}_labels.csv"
+def load_sensor_rows(session_id: str) -> pd.DataFrame:
+    return read_csv_if_exists(sensor_path(session_id), SENSOR_COLUMNS)
 
 
 def write_label_row(row: dict[str, object], path: Path) -> None:
@@ -120,7 +153,21 @@ def session_label_rows(labels: pd.DataFrame, user_id: str, session_id: str) -> p
     return rows
 
 
-def initialize_collection(clips: pd.DataFrame, user_id: str, session_id: str) -> None:
+def existing_label(labels: pd.DataFrame, user_id: str, session_id: str, clip_id: str) -> pd.Series | None:
+    rows = session_label_rows(labels, user_id, session_id)
+    rows = rows[rows["clip_id"].astype(str) == str(clip_id)]
+    return None if rows.empty else rows.iloc[0]
+
+
+def initialize_collection(
+    clips: pd.DataFrame,
+    *,
+    user_id: str,
+    session_id: str,
+    sensor_source: str,
+    serial_port: str,
+    baud_rate: int,
+) -> None:
     order = clips["clip_id"].astype(str).tolist()
     random.Random(session_id).shuffle(order)
     st.session_state.collection_started = True
@@ -128,15 +175,20 @@ def initialize_collection(clips: pd.DataFrame, user_id: str, session_id: str) ->
     st.session_state.session_id = session_id
     st.session_state.order = order
     st.session_state.trial_position = 0
+    st.session_state.sensor_source = sensor_source
+    st.session_state.serial_port = serial_port
+    st.session_state.baud_rate = baud_rate
     reset_trial_state(stage="rest")
 
 
 def reset_trial_state(*, stage: str) -> None:
     st.session_state.stage = stage
-    st.session_state.rest_started_at = None
-    st.session_state.listen_started_at = None
+    st.session_state.rest_start_time = None
+    st.session_state.rest_end_time = None
     st.session_state.clip_start_time = None
     st.session_state.clip_end_time = None
+    st.session_state.rest_sample_count = 0
+    st.session_state.listen_sample_count = 0
 
 
 def current_clip(clips: pd.DataFrame) -> pd.Series:
@@ -150,143 +202,73 @@ def move_trial(delta: int) -> None:
     reset_trial_state(stage="rest")
 
 
-def existing_label(labels: pd.DataFrame, user_id: str, session_id: str, clip_id: str) -> pd.Series | None:
-    rows = session_label_rows(labels, user_id, session_id)
-    rows = rows[rows["clip_id"].astype(str) == str(clip_id)]
-    return None if rows.empty else rows.iloc[0]
+def open_sensor_reader() -> MockSensorReader | ArduinoSerialReader:
+    source = st.session_state.get("sensor_source", "Mock sensor")
+    if source == "Arduino USB":
+        port = st.session_state.get("serial_port", "")
+        if not port:
+            raise RuntimeError("Select an Arduino serial port before recording.")
+        return ArduinoSerialReader(port=port, baud_rate=int(st.session_state.get("baud_rate", 115200)))
+    return MockSensorReader()
 
 
-def biometric_row(
-    biometrics: pd.DataFrame,
-    user_id: str,
-    session_id: str,
+def capture_sensor_phase(
+    *,
+    phase: str,
+    duration_seconds: int,
     clip_id: str,
-) -> pd.Series | None:
-    if biometrics.empty:
-        return None
-    rows = biometrics[
-        (biometrics["user_id"].astype(str) == str(user_id))
-        & (biometrics["session_id"].astype(str) == str(session_id))
-        & (biometrics["clip_id"].astype(str) == str(clip_id))
-    ]
-    if rows.empty:
-        rows = biometrics[biometrics["clip_id"].astype(str) == str(clip_id)]
-    return None if rows.empty else rows.iloc[0]
+    trial_index: int,
+) -> tuple[str, str, int]:
+    reader = open_sensor_reader()
+    rows: list[dict[str, object]] = []
+    start_time = iso_now()
+    start_monotonic = time.time()
 
+    progress = st.progress(0.0, text=f"Recording {phase} sensor data")
+    latest = st.empty()
+    hr_chart = st.empty()
+    eda_chart = st.empty()
+    sample_frame = pd.DataFrame(columns=["elapsed_sec", "hr", "eda"])
 
-def prediction_row(recommendations: pd.DataFrame, user_id: str, clip_id: str) -> pd.Series | None:
-    if recommendations.empty:
-        return None
-    rows = recommendations[
-        (recommendations["user_id"].astype(str) == str(user_id))
-        & (recommendations["clip_id"].astype(str) == str(clip_id))
-    ]
-    return None if rows.empty else rows.iloc[0]
+    try:
+        while True:
+            elapsed = time.time() - start_monotonic
+            if elapsed >= duration_seconds:
+                break
 
+            sample = reader.read_sample(timeout=0.2)
+            if sample is not None:
+                row = sample_to_row(
+                    sample,
+                    user_id=st.session_state.user_id,
+                    session_id=st.session_state.session_id,
+                    clip_id=clip_id,
+                    trial_index=trial_index,
+                    phase=phase,
+                )
+                rows.append(row)
+                sample_frame.loc[len(sample_frame)] = {
+                    "elapsed_sec": round(elapsed, 2),
+                    "hr": sample.hr,
+                    "eda": sample.eda,
+                }
 
-def next_recommendation(
-    recommendations: pd.DataFrame,
-    user_id: str,
-    target_mode: str,
-    current_clip_id: str,
-) -> pd.Series | None:
-    if recommendations.empty:
-        return None
-    rows = recommendations[
-        (recommendations["user_id"].astype(str) == str(user_id))
-        & (recommendations["target_mode"].astype(str) == target_mode)
-        & (recommendations["clip_id"].astype(str) != str(current_clip_id))
-    ].sort_values("rank")
-    return None if rows.empty else rows.iloc[0]
+                hr_text = "--" if sample.hr is None else f"{sample.hr:.1f} bpm"
+                eda_text = "--" if sample.eda is None else f"{sample.eda:.3f}"
+                latest.metric("Latest sample", f"HR {hr_text} / EDA {eda_text}")
+                if sample_frame["hr"].notna().any():
+                    hr_chart.line_chart(sample_frame[["elapsed_sec", "hr"]].dropna().set_index("elapsed_sec"), height=180)
+                if sample_frame["eda"].notna().any():
+                    eda_chart.line_chart(sample_frame[["elapsed_sec", "eda"]].dropna().set_index("elapsed_sec"), height=180)
 
+            progress.progress(min(elapsed / duration_seconds, 1.0), text=f"{phase.title()} recording: {max(0, int(duration_seconds - elapsed))}s remaining")
 
-def arousal_state(row: pd.Series | None, prediction: pd.Series | None) -> tuple[str, float | None]:
-    if prediction is not None and "arousal_prob" in prediction:
-        probability = float(prediction["arousal_prob"])
-        return ("energized" if probability >= 0.5 else "calm", probability)
-
-    if row is None:
-        return "unknown", None
-    hr_change = float(row.get("hr_change_from_baseline", 0))
-    eda_peaks = float(row.get("eda_peak_count", 0))
-    proxy = min(1.0, max(0.0, (hr_change / 15 * 0.65) + (eda_peaks / 8 * 0.35)))
-    return ("energized" if proxy >= 0.5 else "calm", proxy)
-
-
-def trial_traces(row: pd.Series | None, clip_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    rng = np.random.default_rng(abs(hash(clip_id)) % (2**32))
-    seconds = np.arange(0, 31)
-    if row is None:
-        empty = pd.DataFrame({"second": seconds, "value": np.nan}).set_index("second")
-        return empty, empty
-
-    hr_mean = float(row.get("hr_mean", 70))
-    hr_change = float(row.get("hr_change_from_baseline", 0))
-    eda_mean = float(row.get("eda_mean", 1.0))
-    eda_change = float(row.get("eda_change_from_baseline", 0))
-    ramp = np.sin(np.linspace(0, np.pi, len(seconds)))
-
-    hr = hr_mean - hr_change * 0.35 + ramp * hr_change * 0.75 + rng.normal(0, 0.7, len(seconds))
-    eda = eda_mean - eda_change * 0.30 + ramp * eda_change * 0.85 + rng.normal(0, 0.012, len(seconds))
-
-    hr_frame = pd.DataFrame({"second": seconds, "HR bpm": hr}).set_index("second")
-    eda_frame = pd.DataFrame({"second": seconds, "EDA conductance": eda}).set_index("second")
-    return hr_frame, eda_frame
-
-
-def countdown_panel(label: str, state_key: str, seconds: int, done_stage: str) -> None:
-    started_at = st.session_state.get(state_key)
-    if started_at is None:
-        if st.button(f"Start {seconds}s {label}", width="stretch"):
-            st.session_state[state_key] = time.time()
-            st.rerun()
-        return
-
-    target_ms = int((float(started_at) + seconds) * 1000)
-    timer_id = f"{label}-{state_key}".replace("_", "-")
-    st.iframe(
-        f"""
-        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-                    border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px;
-                    background: #f8fafc;">
-          <div style="font-size: 13px; color: #475569; margin-bottom: 8px;">
-            {seconds}-second {label} timer
-          </div>
-          <div id="{timer_id}" style="font-size: 36px; font-weight: 700; color: #0f172a;">
-            --s
-          </div>
-          <div id="{timer_id}-note" style="font-size: 13px; color: #475569; margin-top: 8px;">
-            Stay still and breathe normally. This timer updates locally, so the page should not flicker.
-          </div>
-        </div>
-        <script>
-          const target{timer_id.replace("-", "")} = {target_ms};
-          const valueEl{timer_id.replace("-", "")} = document.getElementById("{timer_id}");
-          const noteEl{timer_id.replace("-", "")} = document.getElementById("{timer_id}-note");
-          function tick{timer_id.replace("-", "")}() {{
-            const remaining = Math.max(0, Math.ceil((target{timer_id.replace("-", "")} - Date.now()) / 1000));
-            valueEl{timer_id.replace("-", "")}.textContent = remaining + "s";
-            if (remaining === 0) {{
-              noteEl{timer_id.replace("-", "")}.textContent = "Timer complete. Click Continue when ready.";
-              valueEl{timer_id.replace("-", "")}.style.color = "#166534";
-            }} else {{
-              window.setTimeout(tick{timer_id.replace("-", "")}, 250);
-            }}
-          }}
-          tick{timer_id.replace("-", "")}();
-        </script>
-        """,
-        width="stretch",
-        height=142,
-    )
-
-    if st.button(f"Continue after {label}", width="stretch"):
-        elapsed = time.time() - float(started_at)
-        if elapsed < seconds:
-            st.warning(f"Wait {int(np.ceil(seconds - elapsed))} more seconds before continuing.")
-        else:
-            st.session_state.stage = done_stage
-            st.rerun()
+        end_time = iso_now()
+        append_sensor_rows(sensor_path(st.session_state.session_id), rows)
+        progress.progress(1.0, text=f"{phase.title()} recording complete")
+        return start_time, end_time, len(rows)
+    finally:
+        reader.close()
 
 
 def render_navigation(total: int) -> None:
@@ -310,32 +292,55 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
     user_id = st.session_state.user_id
     session_id = st.session_state.session_id
     clip_id = str(clip["clip_id"])
+    trial_index = int(st.session_state.trial_position + 1)
     saved = existing_label(labels, user_id, session_id, clip_id)
 
     if saved is not None:
-        st.success("This song already has a saved rating. You can overwrite it below or move to another song.")
+        st.success("This song already has a saved rating. You can overwrite it or move to another song.")
 
     st.subheader(f"{clip['track_name']} - {clip['artist']}")
-    st.caption("Flow: rest for 30 seconds, play the 30-second preview, then rate how you felt.")
+    st.caption("Training flow: record baseline rest, record the music response, then rate the song.")
 
     stage = st.session_state.get("stage", "rest")
     if stage == "rest":
-        st.info("Rest quietly before the song so HR and EDA can settle toward baseline.")
-        countdown_panel("rest", "rest_started_at", REST_SECONDS, "listen")
+        st.info("Rest quietly for 30 seconds. HR and EDA samples will be saved as the baseline phase.")
+        if st.button("Record 30s rest baseline", width="stretch"):
+            try:
+                start_time, end_time, sample_count = capture_sensor_phase(
+                    phase="rest",
+                    duration_seconds=REST_SECONDS,
+                    clip_id=clip_id,
+                    trial_index=trial_index,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+                return
+            st.session_state.rest_start_time = start_time
+            st.session_state.rest_end_time = end_time
+            st.session_state.rest_sample_count = sample_count
+            st.session_state.stage = "listen"
+            st.rerun()
         return
 
     if stage == "listen":
         st.audio(str(clip["preview_url"]))
-        st.caption("Press play on the audio, then start the 30-second listen timer.")
-        if st.session_state.clip_start_time is None and st.session_state.listen_started_at is None:
-            if st.button("Start song timer", width="stretch"):
-                st.session_state.clip_start_time = iso_now()
-                st.session_state.listen_started_at = time.time()
-                st.rerun()
-            return
-        countdown_panel("song", "listen_started_at", LISTEN_SECONDS, "rate")
-        if st.session_state.stage == "rate" and st.session_state.clip_end_time is None:
-            st.session_state.clip_end_time = iso_now()
+        st.info("Press play on the preview, then immediately click the button below to record the 30-second music response.")
+        if st.button("Record 30s song response", width="stretch"):
+            try:
+                start_time, end_time, sample_count = capture_sensor_phase(
+                    phase="listen",
+                    duration_seconds=LISTEN_SECONDS,
+                    clip_id=clip_id,
+                    trial_index=trial_index,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+                return
+            st.session_state.clip_start_time = start_time
+            st.session_state.clip_end_time = end_time
+            st.session_state.listen_sample_count = sample_count
+            st.session_state.stage = "rate"
+            st.rerun()
         return
 
     default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
@@ -345,21 +350,21 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
             "Preference",
             1,
             5,
-            int(saved["preference"]) if saved is not None else 3,
+            int(saved["preference"]) if saved is not None and str(saved["preference"]).strip() else 3,
             help="1 = dislike, 5 = like",
         )
         arousal = st.slider(
             "Arousal",
             1,
             5,
-            int(saved["arousal"]) if saved is not None else 3,
+            int(saved["arousal"]) if saved is not None and str(saved["arousal"]).strip() else 3,
             help="1 = calm, 5 = energized",
         )
         valence = st.slider(
             "Valence",
             1,
             5,
-            int(saved["valence"]) if saved is not None else 3,
+            int(saved["valence"]) if saved is not None and str(saved["valence"]).strip() else 3,
             help="1 = negative, 5 = positive",
         )
         mood = st.selectbox("Mood", MOOD_OPTIONS, index=MOOD_OPTIONS.index(default_mood))
@@ -368,7 +373,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
             "Familiarity",
             1,
             5,
-            int(saved["familiarity"]) if saved is not None else 3,
+            int(saved["familiarity"]) if saved is not None and str(saved["familiarity"]).strip() else 3,
             help="1 = unfamiliar, 5 = very familiar",
         )
         notes = st.text_area("Notes", value="" if saved is None or pd.isna(saved.get("notes", "")) else str(saved["notes"]))
@@ -379,7 +384,9 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
             "user_id": user_id,
             "session_id": session_id,
             "clip_id": clip_id,
-            "trial_index": st.session_state.trial_position + 1,
+            "trial_index": trial_index,
+            "rest_start_time": st.session_state.rest_start_time or "",
+            "rest_end_time": st.session_state.rest_end_time or "",
             "clip_start_time": st.session_state.clip_start_time or iso_now(),
             "clip_end_time": st.session_state.clip_end_time or iso_now(),
             "preference": preference,
@@ -398,109 +405,124 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
         st.rerun()
 
 
-def render_biometrics_and_prediction(
-    biometrics: pd.DataFrame,
-    recommendations: pd.DataFrame,
-    user_id: str,
-    session_id: str,
-    clip_id: str,
-    target_mode: str,
-) -> None:
-    bio = biometric_row(biometrics, user_id, session_id, clip_id)
-    pred = prediction_row(recommendations, user_id, clip_id)
-    state, arousal_prob = arousal_state(bio, pred)
-    next_song = next_recommendation(recommendations, user_id, target_mode, clip_id)
+def render_sensor_panel(clip_id: str, trial_index: int) -> None:
+    st.subheader("Sensor Recording")
+    st.caption("Raw HR and EDA samples are saved during the rest and listen phases.")
+    sensor_file = sensor_path(st.session_state.session_id)
+    st.code(str(sensor_file.relative_to(Path.cwd())), language="text")
 
-    prediction_col, rec_col = st.columns(2)
-    with prediction_col:
-        st.subheader("Model Signal")
-        st.metric("Predicted arousal", state)
-        if arousal_prob is not None:
-            st.progress(float(arousal_prob), text=f"{arousal_prob:.0%} energized")
-    with rec_col:
-        st.subheader("Next Recommendation")
-        if next_song is None:
-            st.info("Run `python src/models/recommend.py --target-mode all --user-id <id> --session-id <id>` after collecting labels.")
-        else:
-            st.write(f"**{next_song['track_name']}**")
-            st.write(str(next_song["artist"]))
-            st.metric("Score", f"{float(next_song['score']):.2f}")
-
-    st.subheader("Biometric Preview")
-    if bio is None:
-        st.info("No biometric row found yet. After real sensors are ready, this section should use the real export.")
+    rows = load_sensor_rows(st.session_state.session_id)
+    rows = rows[
+        (rows["clip_id"].astype(str) == str(clip_id))
+        & (pd.to_numeric(rows["trial_index"], errors="coerce") == trial_index)
+    ].copy()
+    if rows.empty:
+        st.info("No sensor samples saved for this song yet.")
         return
 
-    metrics = st.columns(6)
-    metrics[0].metric("HR mean", f"{float(bio['hr_mean']):.1f} bpm")
-    metrics[1].metric("HR max", f"{float(bio['hr_max']):.1f} bpm")
-    metrics[2].metric("HR change", f"{float(bio['hr_change_from_baseline']):+.1f} bpm")
-    metrics[3].metric("EDA mean", f"{float(bio['eda_mean']):.3f}")
-    metrics[4].metric("EDA peaks", int(bio["eda_peak_count"]))
-    metrics[5].metric("EDA amplitude", f"{float(bio['eda_max_amplitude']):.3f}")
+    rows["sample_index"] = range(1, len(rows) + 1)
+    rest_count = int((rows["phase"] == "rest").sum())
+    listen_count = int((rows["phase"] == "listen").sum())
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Rest samples", rest_count)
+    metric_cols[1].metric("Listen samples", listen_count)
+    if rows["hr"].notna().any():
+        metric_cols[2].metric("Latest HR", f"{float(rows['hr'].dropna().iloc[-1]):.1f} bpm")
+    if rows["eda"].notna().any():
+        metric_cols[3].metric("Latest EDA", f"{float(rows['eda'].dropna().iloc[-1]):.3f}")
 
-    hr_frame, eda_frame = trial_traces(bio, clip_id)
+    hr_rows = rows[["sample_index", "phase", "hr"]].dropna()
+    eda_rows = rows[["sample_index", "phase", "eda"]].dropna()
     hr_col, eda_col = st.columns(2)
     with hr_col:
-        st.caption("Heart rate response")
-        st.line_chart(hr_frame, height=240)
+        st.caption("Heart rate")
+        if hr_rows.empty:
+            st.info("No HR values parsed.")
+        else:
+            st.line_chart(hr_rows.set_index("sample_index")[["hr"]], height=240)
     with eda_col:
-        st.caption("EDA/GSR response")
-        st.line_chart(eda_frame, height=240)
+        st.caption("EDA/GSR")
+        if eda_rows.empty:
+            st.info("No EDA values parsed.")
+        else:
+            st.line_chart(eda_rows.set_index("sample_index")[["eda"]], height=240)
+
+
+def render_sensor_setup() -> tuple[str, str, int]:
+    sensor_source = st.radio("Sensor source", ["Mock sensor", "Arduino USB"], horizontal=True)
+    serial_port = ""
+    baud_rate = 115200
+
+    if sensor_source == "Arduino USB":
+        ports = list_serial_ports()
+        if ports:
+            serial_port = st.selectbox("Arduino serial port", ports)
+        else:
+            st.warning("No serial ports found. Plug in the Arduino, then reload.")
+            serial_port = st.text_input("Manual serial port", value="/dev/cu.usbmodem")
+        baud_rate = int(st.number_input("Baud rate", min_value=1200, max_value=2000000, value=115200, step=9600))
+        st.caption("Accepted Arduino line formats: `HR:72,EDA:1.42`, `72,1.42`, or JSON like `{\"hr\":72,\"eda\":1.42}`.")
+    else:
+        st.caption("Mock sensor generates plausible HR and EDA values so the training flow can be tested without hardware.")
+
+    return sensor_source, serial_port, baud_rate
 
 
 def main() -> None:
     ensure_project_dirs()
-    st.set_page_config(page_title="BioBeat Self-Training", page_icon="BB", layout="wide")
-    st.title("BioBeat Self-Training")
+    st.set_page_config(page_title="BioBeat Training Collector", page_icon="BB", layout="wide")
+    st.title("BioBeat Training Collector")
 
-    clips, labels, biometrics, recommendations = load_dashboard_data()
-    if clips.empty:
-        st.error("No clips found. Run `python src/itunes/build_clips_csv.py` first.")
+    try:
+        clips = load_clips(CLIPS_CSV)
+    except Exception as exc:
+        st.error(str(exc))
         st.stop()
+    labels = load_labels(LABELS_DIR)
 
     with st.sidebar:
         st.header("Session")
         default_session = datetime.now().strftime("self_%Y%m%d_%H%M%S")
         user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
         session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
-        target_mode = st.segmented_control("Recommendation mode", ["calm", "hype"], default="calm")
+        sensor_source, serial_port, baud_rate = render_sensor_setup()
         if st.button("Begin / restart session", disabled=not user_id.strip() or not session_id.strip(), width="stretch"):
-            initialize_collection(clips, user_id.strip(), session_id.strip())
+            initialize_collection(
+                clips,
+                user_id=user_id.strip(),
+                session_id=session_id.strip(),
+                sensor_source=sensor_source,
+                serial_port=serial_port,
+                baud_rate=baud_rate,
+            )
             st.rerun()
 
         if st.session_state.get("collection_started"):
-            path = label_path(st.session_state.session_id)
-            st.caption(f"Saving to `{path.relative_to(Path.cwd())}`")
+            st.caption(f"Labels: `{label_path(st.session_state.session_id).relative_to(Path.cwd())}`")
+            st.caption(f"Sensors: `{sensor_path(st.session_state.session_id).relative_to(Path.cwd())}`")
 
     if not st.session_state.get("collection_started"):
-        st.info("Enter a user ID and session ID, then begin. The app will guide you through rest, listening, and rating.")
+        st.info("Enter a user ID/session ID, choose mock or Arduino USB sensors, then begin.")
         st.stop()
 
     total = len(st.session_state.order)
     render_navigation(total)
 
     if st.session_state.get("stage") == "complete":
-        st.success("Session complete. Labels were saved after each song.")
+        st.success("Session complete. Labels and raw sensor samples were saved incrementally.")
         st.stop()
 
     clip = current_clip(clips)
+    trial_index = int(st.session_state.trial_position + 1)
     session_rows = session_label_rows(labels, st.session_state.user_id, st.session_state.session_id)
     completed = session_rows["clip_id"].nunique() if not session_rows.empty else 0
     st.caption(f"Saved ratings: {completed} of {total}")
 
-    collection_col, signal_col = st.columns([1.05, 0.95])
+    collection_col, sensor_col = st.columns([1.0, 1.0])
     with collection_col:
         render_collection_flow(clip, labels)
-    with signal_col:
-        render_biometrics_and_prediction(
-            biometrics,
-            recommendations,
-            st.session_state.user_id,
-            st.session_state.session_id,
-            str(clip["clip_id"]),
-            str(target_mode),
-        )
+    with sensor_col:
+        render_sensor_panel(str(clip["clip_id"]), trial_index)
 
 
 if __name__ == "__main__":

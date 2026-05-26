@@ -1,6 +1,6 @@
 # BioBeat Group Usage Guide
 
-This guide explains how the group should use the BioBeat repo for the class prototype. The current system is designed to work before the real HR and EDA/GSR sensors are ready.
+This guide explains how the group should use the BioBeat repo for the class prototype. The main dashboard is now a training-run collector: it plays songs, records HR/EDA samples from mock data or Arduino-over-USB serial, and saves self-report labels.
 
 ## What Each Teammate Should Own
 
@@ -10,9 +10,9 @@ Use these ownership lanes to avoid overwriting each other.
 | --- | --- | --- |
 | Music/data person | `data/input/desired_songs.csv`, `data/clips.csv` | Add songs, run the iTunes clip builder, check that preview URLs are correct. |
 | Experiment operator | `src/dashboard/app.py`, `data/raw/labels/` | Run participant sessions and make sure labels save correctly. |
-| Sensor team | `data/raw/sensor/`, `data/processed/biometric_features_real.csv` | Collect HR/EDA data and export real biometric features with the agreed schema. |
+| Sensor team | Arduino sketch, `data/raw/sensor/`, `src/sensors/arduino_serial.py` | Send HR/EDA lines over USB serial and verify the dashboard records them. |
 | ML person | `src/features/`, `src/models/` | Extract audio features, merge tables, train/evaluate models, generate recommendations. |
-| Dashboard/demo person | `src/dashboard/app.py`, `data/processed/recommendations.csv` | Run the replay dashboard and prepare the final demo flow. |
+| Dashboard/demo person | `src/dashboard/app.py`, `data/processed/recommendations.csv` | Run the training collector and later prepare the recommendation demo flow. |
 
 One person should coordinate GitHub merges/pushes so generated CSV files do not get accidentally overwritten.
 
@@ -110,20 +110,41 @@ For each participant:
 
 1. Enter a unique `user_id`, for example `jason`, `p01`, or `participant_03`.
 2. Enter a unique `session_id`, for example `s01` or `p03_s01`.
-3. Click `Begin / restart session`.
-4. Use `Previous` and `Next` to move between songs if needed.
-5. For each song, complete the 30-second rest period before listening.
-6. Play the 30-second preview, start the song timer, then rate the song.
+3. Choose `Mock sensor` for testing or `Arduino USB` for real hardware.
+4. If using Arduino, select the serial port and baud rate.
+5. Click `Begin / restart session`.
+6. Use `Previous` and `Next` to move between songs if needed.
+7. For each song, record the 30-second rest baseline.
+8. Press play on the preview, then record the 30-second song response.
+9. Rate the song.
 
 The dashboard saves after every rating, so losing the browser should not lose the whole session.
 
-Labels are written to:
+Labels and raw sensor samples are written to:
 
 ```text
 data/raw/labels/{session_id}_labels.csv
+data/raw/sensor/{session_id}_sensor.csv
 ```
 
 Do not reuse the same `session_id` for different participants.
+
+### Arduino Serial Format
+
+The dashboard accepts flexible Arduino serial lines. The easiest format is:
+
+```text
+HR:72,EDA:1.42
+```
+
+It also accepts:
+
+```text
+72,1.42
+{"hr":72,"eda":1.42}
+```
+
+Use beats per minute for HR. Use the EDA/GSR unit your sensor team chooses, but keep it consistent across runs.
 
 ### 4. Extract Audio Features
 
@@ -139,7 +160,9 @@ data/processed/audio_features.csv
 
 Audio files should not be committed. Only the extracted CSV should be committed.
 
-### 5. Generate Fake Biometrics Until Sensors Are Ready
+### 5. Produce Biometric Features
+
+For quick mock/demo testing:
 
 ```bash
 python src/features/generate_fake_biometrics.py
@@ -151,7 +174,23 @@ This writes:
 data/processed/biometric_features_fake.csv
 ```
 
-The fake data is only for testing the end-to-end pipeline. It should be replaced by real sensor features for the final sensor-backed analysis.
+For real dashboard-recorded sensor runs:
+
+```bash
+python src/features/extract_biometric_features.py
+```
+
+This reads:
+
+```text
+data/raw/sensor/*_sensor.csv
+```
+
+and writes:
+
+```text
+data/processed/biometric_features_real.csv
+```
 
 ### 6. Merge The Training Table
 
@@ -161,7 +200,7 @@ With fake biometrics:
 python src/features/merge_features.py
 ```
 
-With real biometrics after the sensor team has exported them:
+With real biometrics from the dashboard sensor recordings:
 
 ```bash
 python src/features/merge_features.py --use-real-biometrics
@@ -236,7 +275,7 @@ Open the Streamlit URL, usually:
 http://localhost:8501
 ```
 
-Use the dashboard to collect training labels and inspect model signals. It shows:
+Use the dashboard to collect training labels and sensor streams. It shows:
 
 - current participant
 - current song
@@ -244,11 +283,10 @@ Use the dashboard to collect training labels and inspect model signals. It shows
 - previous/next song navigation
 - 30-second rest timer before each song
 - self-report labels
-- fake or replayed HR values
-- fake or replayed EDA values
-- predicted arousal state
-- recommended next song
+- mock or Arduino HR values
+- mock or Arduino EDA values
 - separate HR and EDA charts for the current trial
+- saved raw sensor sample counts
 
 ## Quick Full Demo Reset
 
@@ -268,7 +306,25 @@ streamlit run src/dashboard/app.py
 
 ## Sensor Team Contract
 
-The sensor team should eventually produce:
+The dashboard records raw sensor samples to:
+
+```text
+data/raw/sensor/{session_id}_sensor.csv
+```
+
+Raw sensor rows use this schema:
+
+```csv
+timestamp,user_id,session_id,clip_id,trial_index,phase,hr,eda,source,raw_line
+```
+
+Run this command to convert those raw samples into model-ready biometric features:
+
+```bash
+python src/features/extract_biometric_features.py
+```
+
+That command produces:
 
 ```text
 data/processed/biometric_features_real.csv
@@ -288,7 +344,7 @@ session_id
 clip_id
 ```
 
-The real sensor file should have one row per participant/session/clip. Once that file exists, the rest of the pipeline can switch from fake to real biometrics with:
+The real feature file should have one row per participant/session/clip. Once that file exists, the rest of the pipeline can switch from fake to real biometrics with:
 
 ```bash
 python src/features/merge_features.py --use-real-biometrics
@@ -315,6 +371,7 @@ Do not commit:
 - downloaded audio files
 - `.m4a`, `.mp3`, `.wav`
 - model `.joblib` or `.pkl` files
+- raw sensor CSVs from private participant sessions
 - private participant data unless the group has permission
 
 ## Troubleshooting
@@ -345,11 +402,13 @@ If the model script fails because there are not enough labels, collect more part
 python src/features/generate_demo_labels.py --participants 8
 ```
 
-If the dashboard has no recommendation, rerun:
+If the dashboard does not show Arduino ports, unplug/replug the Arduino, confirm the Arduino IDE can see it, then reload Streamlit.
+
+If the model pipeline should use real dashboard recordings, run:
 
 ```bash
-python src/models/train_models.py
-python src/models/recommend.py --target-mode all --user-id demo_user --session-id demo_session
+python src/features/extract_biometric_features.py
+python src/features/merge_features.py --use-real-biometrics
 ```
 
 ## Final Demo Story

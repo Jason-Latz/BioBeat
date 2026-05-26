@@ -8,3 +8,4 @@ audioread
 scikit-learn
 matplotlib
 joblib
+pyserial
