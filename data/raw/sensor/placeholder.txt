@@ -1,0 +1,3 @@
+The sensor team can place raw heart-rate and EDA/GSR captures here.
+
+Use session IDs and ISO 8601 timestamps that align with the experiment labels.
