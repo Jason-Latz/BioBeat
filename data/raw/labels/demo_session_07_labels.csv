@@ -1,0 +1,13 @@
+user_id,session_id,clip_id,trial_index,clip_start_time,clip_end_time,preference,arousal,valence,mood,familiarity,notes
+demo_user_07,demo_session_07,clip_004,1,2026-05-24T22:10:52.000,2026-05-24T22:11:22.466,4,5,3,happy,1,
+demo_user_07,demo_session_07,clip_005,2,2026-05-24T22:12:52.000,2026-05-24T22:13:22.063,3,3,4,relaxed,3,
+demo_user_07,demo_session_07,clip_009,3,2026-05-24T22:14:52.000,2026-05-24T22:15:22.082,4,5,4,excited,3,
+demo_user_07,demo_session_07,clip_006,4,2026-05-24T22:16:52.000,2026-05-24T22:17:22.174,3,3,1,annoyed,4,
+demo_user_07,demo_session_07,clip_007,5,2026-05-24T22:18:52.000,2026-05-24T22:19:22.543,3,3,4,neutral,1,
+demo_user_07,demo_session_07,clip_012,6,2026-05-24T22:20:52.000,2026-05-24T22:21:22.145,3,3,1,sad,4,
+demo_user_07,demo_session_07,clip_010,7,2026-05-24T22:22:52.000,2026-05-24T22:23:22.224,2,2,4,relaxed,3,
+demo_user_07,demo_session_07,clip_003,8,2026-05-24T22:24:52.000,2026-05-24T22:25:22.296,3,3,3,sad,2,
+demo_user_07,demo_session_07,clip_001,9,2026-05-24T22:26:52.000,2026-05-24T22:27:22.636,4,2,4,neutral,3,
+demo_user_07,demo_session_07,clip_011,10,2026-05-24T22:28:52.000,2026-05-24T22:29:22.699,3,5,3,happy,3,
+demo_user_07,demo_session_07,clip_008,11,2026-05-24T22:30:52.000,2026-05-24T22:31:22.260,2,2,5,neutral,2,
+demo_user_07,demo_session_07,clip_002,12,2026-05-24T22:32:52.000,2026-05-24T22:33:22.273,5,5,5,excited,3,
