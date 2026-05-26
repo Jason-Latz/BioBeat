@@ -27,3 +27,4 @@ Do not leave that learning only in chat history.
 - BioBeat collection UI should use one explicit control to start song playback and sensor capture together; avoid separate manual play/record steps when possible.
 - Split BioBeat commits by purpose even for small follow-ups: separate source data edits, generated artifact updates, docs, and tooling/instruction changes.
 - BioBeat rating flow should auto-save ratings from the forward navigation action; avoid a separate save button in the normal self-training path.
+- When adding BioBeat songs for training, favor genre diversity and keep batches small enough that self-collection sessions remain practical.
