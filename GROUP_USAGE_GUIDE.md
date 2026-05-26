@@ -1,24 +1,31 @@
-# BioBeat Group Usage Guide
+# BioBeat Usage Guide
 
-This guide explains how the group should use the BioBeat repo for the class prototype. The main dashboard is now a training-run collector: it plays songs, records HR/EDA samples from mock data or Arduino-over-USB serial, and saves self-report labels.
+This is the practical guide for using BioBeat right now.
 
-## What Each Teammate Should Own
+There are basically two jobs:
 
-Use these ownership lanes to avoid overwriting each other.
+1. Jason runs the music/rating/training pipeline.
+2. The sensor team gets Arduino HR/EDA values streaming over USB.
 
-| Role | Main files | Responsibility |
-| --- | --- | --- |
-| Music/data person | `data/input/desired_songs.csv`, `data/clips.csv` | Add songs, run the iTunes clip builder, check that preview URLs are correct. |
-| Experiment operator | `src/dashboard/app.py`, `data/raw/labels/` | Run participant sessions and make sure labels save correctly. |
-| Sensor team | Arduino sketch, `data/raw/sensor/`, `src/sensors/arduino_serial.py` | Send HR/EDA lines over USB serial and verify the dashboard records them. |
-| ML person | `src/features/`, `src/models/` | Extract audio features, merge tables, train/evaluate models, generate recommendations. |
-| Dashboard/demo person | `src/dashboard/app.py`, `data/processed/recommendations.csv` | Run the training collector and later prepare the recommendation demo flow. |
+Everything else is just files and commands.
 
-One person should coordinate GitHub merges/pushes so generated CSV files do not get accidentally overwritten.
+## What BioBeat Does Right Now
 
-## First-Time Setup
+BioBeat is currently a training data collector.
 
-From a fresh clone:
+For each song it:
+
+1. Records 30 seconds of rest/baseline sensor data.
+2. Plays a 30-second iTunes preview.
+3. Records HR/EDA during the song.
+4. Asks you to rate how you felt.
+5. Saves the labels and raw sensor samples.
+
+After that, Python scripts turn the saved data into features and train simple models.
+
+## Setup
+
+Run this once:
 
 ```bash
 git clone https://github.com/Jason-Latz/BioBeat.git
@@ -28,24 +35,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-If audio extraction fails on iTunes `.m4a` previews, install `ffmpeg`:
-
-```bash
-brew install ffmpeg
-```
-
-For future terminal sessions, only reactivate the environment:
+For later sessions:
 
 ```bash
 cd BioBeat
 source .venv/bin/activate
 ```
 
-## Normal Workflow
+If audio extraction fails later:
 
-Run the project in this order.
+```bash
+brew install ffmpeg
+```
 
-### 1. Add Or Edit Desired Songs
+## Choose Songs
 
 Edit:
 
@@ -53,376 +56,226 @@ Edit:
 data/input/desired_songs.csv
 ```
 
-Each row should look like:
+Each row is:
 
 ```csv
 song_query,artist_query,intended_arousal,intended_valence,intended_mood
-Good Days,SZA,medium,positive,relaxed
+Feather,Nujabes,medium,positive,relaxed
 ```
 
-Use these label values consistently:
+Use these rough labels:
 
 - `intended_arousal`: `low`, `medium`, `high`
 - `intended_valence`: `negative`, `neutral`, `positive`
-- `intended_mood`: `happy`, `sad`, `relaxed`, `tense`, `excited`, `annoyed`, `neutral`, or another short mood label
+- `intended_mood`: `happy`, `sad`, `relaxed`, `tense`, `excited`, `annoyed`, `neutral`
 
-### 2. Build iTunes Preview Clips
+Then rebuild the iTunes preview list:
 
 ```bash
 python src/itunes/build_clips_csv.py
 ```
 
-This writes:
+This creates:
 
 ```text
 data/clips.csv
+```
+
+Check that file to make sure iTunes picked the right songs. If it picked the wrong version, look at:
+
+```text
 data/input/itunes_candidates.csv
-data/input/clip_overrides_template.csv
 ```
 
-Check `data/clips.csv` to make sure the selected songs are right. The script does not blindly trust the first iTunes result; it scores candidates and saves all candidates.
+## Run A Training Session
 
-If a selected song is wrong:
-
-1. Open `data/input/itunes_candidates.csv`.
-2. Find the correct `track_id`.
-3. Copy `data/input/clip_overrides_template.csv` to `data/input/clip_overrides.csv`.
-4. Put the correct `track_id` in `selected_track_id`.
-5. Rerun:
-
-```bash
-python src/itunes/build_clips_csv.py
-```
-
-### 3. Run A Self-Training Session
+Start the app:
 
 ```bash
 streamlit run src/dashboard/app.py
 ```
 
-Open the Streamlit URL, usually:
+Open:
 
 ```text
 http://localhost:8501
 ```
 
-For each participant:
+Then:
 
-1. Enter a unique `user_id`, for example `jason`, `p01`, or `participant_03`.
-2. Enter a unique `session_id`, for example `s01` or `p03_s01`.
-3. Choose `Mock sensor` for testing or `Arduino USB` for real hardware.
-4. If using Arduino, select the serial port and baud rate.
+1. Enter a `user_id`, like `jason`.
+2. Enter a `session_id`, like `jason_s01`.
+3. Choose `Mock sensor` if hardware is not ready.
+4. Choose `Arduino USB` if the sensor team has the Arduino plugged in.
 5. Click `Begin / restart session`.
-6. Use `Previous` and `Next` to move between songs if needed.
-7. For each song, record the 30-second rest baseline.
-8. Press play on the preview, then record the 30-second song response.
-9. Rate the song.
+6. For each song:
+   - record 30 seconds of rest
+   - press play on the song preview
+   - record 30 seconds of song response
+   - rate the song
 
-The dashboard saves after every rating, so losing the browser should not lose the whole session.
+The app saves as you go.
 
-Labels and raw sensor samples are written to:
+Labels go here:
 
 ```text
 data/raw/labels/{session_id}_labels.csv
+```
+
+Raw sensor samples go here:
+
+```text
 data/raw/sensor/{session_id}_sensor.csv
 ```
 
-Do not reuse the same `session_id` for different participants.
+## What The Ratings Mean
 
-### Arduino Serial Format
+You rate each song after hearing it.
 
-The dashboard accepts flexible Arduino serial lines. The easiest format is:
+`preference`: how much you liked it.
+
+- `1` = disliked it
+- `5` = liked it a lot
+
+`arousal`: how activated or energized you felt.
+
+- `1` = calm/sleepy
+- `5` = energized/hyped
+
+`valence`: how positive or negative the feeling was.
+
+- `1` = negative/unpleasant/sad
+- `5` = positive/pleasant/happy
+
+Valence is not the same as arousal. A song can be:
+
+- low arousal, positive valence: calm and pleasant
+- low arousal, negative valence: sad or heavy
+- high arousal, positive valence: exciting
+- high arousal, negative valence: tense or stressful
+
+For the project, arousal is the main target because HR and EDA are most directly related to activation. Valence is secondary and harder to predict, but it helps separate “calm and pleasant” from “calm and sad.”
+
+## Do You Need To Rate The Songs Yourself?
+
+Yes, if you want a model personalized to you.
+
+The model needs examples of:
+
+- what your body did during each song
+- how you rated that song afterward
+
+Without your ratings, the app can still use demo/fake data, but it will not learn your preferences or your mood responses.
+
+Minimum useful amount:
+
+- one full pass through all songs is enough to test the pipeline
+- several sessions are better
+- more participants are better if the final model is supposed to generalize beyond you
+
+For a class demo, one or two full self-runs is a reasonable starting point.
+
+## Sensor Team Instructions
+
+The Arduino should print one HR/EDA sample per line over USB serial.
+
+Preferred format:
 
 ```text
 HR:72,EDA:1.42
 ```
 
-It also accepts:
+Also accepted:
 
 ```text
 72,1.42
 {"hr":72,"eda":1.42}
 ```
 
-Use beats per minute for HR. Use the EDA/GSR unit your sensor team chooses, but keep it consistent across runs.
+Use:
 
-### 4. Extract Audio Features
+- HR in beats per minute
+- EDA/GSR in one consistent unit
+- a steady sample rate if possible
 
-```bash
-python src/features/extract_audio_features.py
-```
-
-This downloads each preview to a temporary file, extracts features, deletes the temporary audio, and writes:
-
-```text
-data/processed/audio_features.csv
-```
-
-Audio files should not be committed. Only the extracted CSV should be committed.
-
-### 5. Produce Biometric Features
-
-For quick mock/demo testing:
-
-```bash
-python src/features/generate_fake_biometrics.py
-```
-
-This writes:
-
-```text
-data/processed/biometric_features_fake.csv
-```
-
-For real dashboard-recorded sensor runs:
-
-```bash
-python src/features/extract_biometric_features.py
-```
-
-This reads:
-
-```text
-data/raw/sensor/*_sensor.csv
-```
-
-and writes:
-
-```text
-data/processed/biometric_features_real.csv
-```
-
-### 6. Merge The Training Table
-
-With fake biometrics:
-
-```bash
-python src/features/merge_features.py
-```
-
-With real biometrics from the dashboard sensor recordings:
-
-```bash
-python src/features/merge_features.py --use-real-biometrics
-```
-
-This writes:
-
-```text
-data/processed/training_table.csv
-```
-
-The table includes metadata, labels, audio features, biometric features, and binary labels:
-
-- `preference_binary`
-- `arousal_binary`
-- `valence_binary`
-
-### 7. Train Baseline Models
-
-```bash
-python src/models/train_models.py
-```
-
-This trains separate models for:
-
-- preference
-- arousal
-- valence
-
-Metrics are written to:
-
-```text
-models/metrics/
-```
-
-Model bundles are written locally as `.joblib` files under `models/`, but those are intentionally ignored by Git. Recreate them by rerunning the training script.
-
-### 8. Generate Recommendations
-
-For one participant/session:
-
-```bash
-python src/models/recommend.py --target-mode all --user-id demo_user --session-id demo_session
-```
-
-For a real participant, replace the IDs:
-
-```bash
-python src/models/recommend.py --target-mode all --user-id p03 --session-id p03_s01
-```
-
-This writes:
-
-```text
-data/processed/recommendations.csv
-```
-
-Recommendation modes:
-
-- `calm`: prefers high predicted preference, low arousal, positive valence
-- `hype`: prefers high predicted preference, high arousal, positive valence
-
-### 9. Run The Dashboard
-
-```bash
-streamlit run src/dashboard/app.py
-```
-
-Open the Streamlit URL, usually:
-
-```text
-http://localhost:8501
-```
-
-Use the dashboard to collect training labels and sensor streams. It shows:
-
-- current participant
-- current song
-- audio player
-- previous/next song navigation
-- 30-second rest timer before each song
-- self-report labels
-- mock or Arduino HR values
-- mock or Arduino EDA values
-- separate HR and EDA charts for the current trial
-- saved raw sensor sample counts
-
-## Quick Full Demo Reset
-
-Use this if you just want to prove the full pipeline runs without collecting new labels:
-
-```bash
-source .venv/bin/activate
-python src/itunes/build_clips_csv.py
-python src/features/extract_audio_features.py
-python src/features/generate_demo_labels.py --participants 8
-python src/features/generate_fake_biometrics.py
-python src/features/merge_features.py
-python src/models/train_models.py
-python src/models/recommend.py --target-mode all --user-id demo_user --session-id demo_session
-streamlit run src/dashboard/app.py
-```
-
-## Sensor Team Contract
-
-The dashboard records raw sensor samples to:
+The dashboard records these lines into:
 
 ```text
 data/raw/sensor/{session_id}_sensor.csv
 ```
 
-Raw sensor rows use this schema:
+## Train The Model
 
-```csv
-timestamp,user_id,session_id,clip_id,trial_index,phase,hr,eda,source,raw_line
-```
-
-Run this command to convert those raw samples into model-ready biometric features:
+After collecting a session, run:
 
 ```bash
+python src/features/extract_audio_features.py
 python src/features/extract_biometric_features.py
-```
-
-That command produces:
-
-```text
-data/processed/biometric_features_real.csv
-```
-
-It must use this exact schema:
-
-```csv
-user_id,session_id,clip_id,hr_mean,hr_max,hr_change_from_baseline,hr_slope,hr_recovery,eda_mean,eda_change_from_baseline,eda_peak_count,eda_max_amplitude,eda_slope,eda_recovery
-```
-
-The most important join keys are:
-
-```text
-user_id
-session_id
-clip_id
-```
-
-The real feature file should have one row per participant/session/clip. Once that file exists, the rest of the pipeline can switch from fake to real biometrics with:
-
-```bash
 python src/features/merge_features.py --use-real-biometrics
 python src/models/train_models.py
 ```
 
-## What To Commit
+This creates:
 
-Commit:
+```text
+data/processed/audio_features.csv
+data/processed/biometric_features_real.csv
+data/processed/training_table.csv
+models/metrics/
+```
 
-- source code under `src/`
-- docs like `README.md` and this guide
-- song request CSVs
-- selected clip metadata
-- extracted feature CSVs
-- label CSVs if they are class/demo data and not private
-- model metrics
-- recommendations CSVs for demo runs
+To generate recommendation rankings:
+
+```bash
+python src/models/recommend.py --target-mode all --user-id jason --session-id jason_s01
+```
+
+Replace `jason` and `jason_s01` with the IDs you used in the dashboard.
+
+## If Sensors Are Not Ready
+
+Use mock data:
+
+```bash
+streamlit run src/dashboard/app.py
+```
+
+Choose `Mock sensor`.
+
+Or regenerate the demo dataset:
+
+```bash
+python src/features/generate_demo_labels.py --participants 8
+python src/features/generate_fake_biometrics.py
+python src/features/merge_features.py
+python src/models/train_models.py
+```
+
+Mock/fake data is only for testing the pipeline. Real results need real sensor recordings.
+
+## What Not To Commit
 
 Do not commit:
 
 - `.venv/`
-- `.env`
 - downloaded audio files
 - `.m4a`, `.mp3`, `.wav`
-- model `.joblib` or `.pkl` files
-- raw sensor CSVs from private participant sessions
-- private participant data unless the group has permission
+- `.joblib` or `.pkl` model files
+- private raw sensor recordings unless everyone agrees
 
-## Troubleshooting
-
-If `requests`, `streamlit`, or `pandas` is missing:
-
-```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-If Streamlit says the port is already in use:
-
-```bash
-streamlit run src/dashboard/app.py --server.port 8502
-```
-
-If audio extraction fails on `.m4a`:
-
-```bash
-brew install ffmpeg
-python src/features/extract_audio_features.py --force
-```
-
-If the model script fails because there are not enough labels, collect more participant sessions or run:
-
-```bash
-python src/features/generate_demo_labels.py --participants 8
-```
-
-If the dashboard does not show Arduino ports, unplug/replug the Arduino, confirm the Arduino IDE can see it, then reload Streamlit.
-
-If the model pipeline should use real dashboard recordings, run:
-
-```bash
-python src/features/extract_biometric_features.py
-python src/features/merge_features.py --use-real-biometrics
-```
+Commit source code, docs, song lists, selected clip metadata, and non-private demo CSVs.
 
 ## Final Demo Story
 
-The strongest final presentation flow is:
+The clean story is:
 
-1. Show the iTunes clips list.
-2. Run or replay a participant session.
-3. Show self-report labels.
-4. Show HR/EDA features, fake now or real later.
-5. Show arousal prediction.
-6. Show calm and hype recommendations.
-7. Explain that real sensor features can replace fake features without changing the rest of the pipeline.
+1. BioBeat plays short music previews.
+2. It records rest and song HR/EDA.
+3. It asks for self-report ratings.
+4. It extracts audio and biometric features.
+5. It trains simple models, especially for arousal.
+6. It uses those predictions to rank calm or hype recommendations.
 
-The realistic claim is:
+The honest claim:
 
-BioBeat uses short-term physiological responses, especially HR and EDA changes from baseline, plus audio features and self-reported labels, to personalize mood-based music recommendations.
+BioBeat does not magically know music taste from physiology. It uses short-term HR/EDA changes, audio features, and self-reported labels to build a simple personalized mood-based recommender.

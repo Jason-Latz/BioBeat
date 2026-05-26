@@ -22,3 +22,4 @@ Do not leave that learning only in chat history.
 - Do not use `time.sleep()` plus `st.rerun()` loops for Streamlit countdowns; render the countdown client-side and validate elapsed time when the user clicks continue.
 - For one-off Python validation commands, set `PYTHONPATH=src` before importing repo packages such as `sensors` or `features`.
 - After regenerating tracked CSV artifacts, normalize line endings or verify with `git diff --check`; CRLF output appears as trailing whitespace.
+- Documentation should assume Jason runs the app/training pipeline and the sensor teammates only handle hardware/Arduino output; keep guides concise and human-readable.
