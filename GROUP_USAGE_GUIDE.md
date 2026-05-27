@@ -5,7 +5,7 @@ This is the practical guide for using BioBeat right now.
 There are basically two jobs:
 
 1. Jason runs the music/rating/training pipeline.
-2. The sensor team gets Seeed GSR/EDA values streaming from the Raspberry Pi over serial while Jason imports Apple Watch HR from CSV after the run.
+2. The sensor team gets Seeed GSR/EDA values streaming from the Raspberry Pi Pico H over serial while Jason imports Apple Watch HRV from CSV after the run.
 
 Everything else is just files and commands.
 
@@ -17,7 +17,7 @@ For each song it:
 
 1. Records 30 seconds of rest/baseline sensor data.
 2. Plays a 30-second iTunes preview.
-3. Records GSR/EDA during the song and leaves room for Apple Watch HR to be imported later.
+3. Records GSR/EDA during the song and leaves room for Apple Watch HRV to be imported later.
 4. Asks you to rate how you felt.
 5. Saves the labels and raw sensor samples.
 
@@ -107,7 +107,7 @@ Then:
 2. Enter a `user_id`, like `jason`.
 3. Enter a `session_id`, like `jason_s01`.
 4. Choose `Mock sensor` if hardware is not ready.
-5. Choose `Raspberry Pi Seeed GSR serial` if the sensor team has the Pi serial stream connected.
+5. Choose `Raspberry Pi Seeed GSR serial` if the sensor team has the Pico serial stream connected.
 6. Click `Begin / restart session`.
 7. For each song:
    - record 30 seconds of rest
@@ -181,7 +181,7 @@ For a class demo, one or two full self-runs is a reasonable starting point.
 
 ## Sensor Team Instructions
 
-The Raspberry Pi should print one Seeed GSR/EDA sample per line over serial.
+The Raspberry Pi Pico should print one Seeed GSR/EDA sample per line over serial.
 
 Preferred format:
 
