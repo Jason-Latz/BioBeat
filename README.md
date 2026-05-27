@@ -2,7 +2,7 @@
 
 BioBeat is a music recommendation prototype that combines short music previews, self-reported mood labels, audio features, and biometric features to train mood-aware recommendation models.
 
-The current implementation has a training collector for self-runs. It can record mock HR/EDA data for testing, read EDA/GSR values from a Seeed GSR sensor connected through a Raspberry Pi serial stream during collection, and import Apple Watch/Apple Health heart-rate CSV rows after a session. It also extracts audio features with `librosa`, turns raw sensor streams into biometric features, and trains baseline models.
+The current implementation has a training collector for self-runs. It can record mock HR/EDA data for testing, read EDA/GSR values from a Seeed GSR sensor connected through a Raspberry Pi Pico serial stream during collection, and import Apple Watch/Apple Health heart-rate CSV rows after a session. It also extracts audio features with `librosa`, turns raw sensor streams into biometric features, and trains baseline models.
 
 ## Quick Start
 
@@ -33,7 +33,7 @@ python src/models/recommend.py --target-mode all --user-id demo_user
 
 The dashboard is the training collection UI. It first reminds the participant to start an Apple Watch Workout, then guides them through a 30-second rest recording, a 30-second song recording, and a rating form for each song. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
 
-The Raspberry Pi stream for the Seeed GSR sensor can print any of these formats:
+The Raspberry Pi Pico stream for the Seeed GSR sensor can print any of these formats:
 
 ```text
 GSR:1.42
