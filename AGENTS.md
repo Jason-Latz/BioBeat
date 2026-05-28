@@ -32,3 +32,5 @@ Do not leave that learning only in chat history.
 - BioBeat dashboard should instruct users to start an Apple Watch Workout before collection and provide a clear end-of-session Apple Watch HR CSV upload/import step with per-song sync coverage.
 - BioBeat serial setup should prioritize real USB serial devices such as `/dev/cu.usbmodem*` and avoid defaulting to Mac Bluetooth/debug console ports.
 - Seeed GSR serial lines may send `milliseconds_since_start,eda`; store the first value as `sensor_elapsed_ms` and never display or treat it as heart rate.
+- BioBeat self-training should be streamlined and fast for long Jason-run sessions: auto-start each 20-second rest period, auto-start song playback plus sensor recording after rest, use native Streamlit rating buttons for emotion and familiarity, use emotion `1=sad, 2=neutral, 3=happy`, use familiarity `1-5`, and auto-advance after familiarity.
+- Do not rely on custom JavaScript, iframe components, hidden global keyboard listeners, or autofocus hacks for BioBeat Streamlit ratings; Jason saw digits highlight the Begin/restart button and the blue capture box failed, so use native Streamlit controls for reliability.

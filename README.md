@@ -31,7 +31,7 @@ python src/models/train_models.py
 python src/models/recommend.py --target-mode all --user-id demo_user
 ```
 
-The dashboard is the training collection UI. It first reminds the participant to start an Apple Watch Workout, then guides them through a 30-second rest recording, a 30-second song recording, and a rating form for each song. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
+The dashboard is the training collection UI. It first reminds the participant to start an Apple Watch Workout, then runs a streamlined loop: 20-second rest recording, automatic 30-second song playback/recording, then two large rating-button prompts for emotion and familiarity. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
 
 The Raspberry Pi Pico stream for the Seeed GSR sensor can print any of these formats:
 

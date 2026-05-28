@@ -26,9 +26,21 @@ from sensors.serial_readers import (  # noqa: E402
 )
 
 
-REST_SECONDS = 30
+REST_SECONDS = 20
 LISTEN_SECONDS = 30
 APPLE_WATCH_SOURCE = "apple_watch_csv"
+EMOTION_LABELS = {
+    1: "sad",
+    2: "neutral",
+    3: "happy",
+}
+FAMILIARITY_LABELS = {
+    1: "never heard it before",
+    2: "maybe recognize it",
+    3: "have heard it a few times",
+    4: "know it well",
+    5: "very familiar / personally meaningful / know what is coming",
+}
 LABEL_COLUMNS = [
     "user_id",
     "session_id",
@@ -58,17 +70,6 @@ SENSOR_COLUMNS = [
     "source",
     "raw_line",
 ]
-MOOD_OPTIONS = [
-    "happy",
-    "sad",
-    "relaxed",
-    "tense",
-    "excited",
-    "annoyed",
-    "neutral",
-    "other",
-]
-
 
 def iso_now() -> str:
     return datetime.now().isoformat(timespec="milliseconds")
@@ -177,10 +178,6 @@ def write_label_row(row: dict[str, object], path: Path) -> None:
         writer.writerows(rows)
 
 
-def rating_key(clip_id: str, field: str) -> str:
-    return f"rating_{clip_id}_{field}"
-
-
 def saved_field(saved: pd.Series | None, field: str, default: object = "") -> object:
     if saved is None or field not in saved or pd.isna(saved.get(field)):
         return default
@@ -241,12 +238,14 @@ def initialize_collection(
 
 def reset_trial_state(*, stage: str) -> None:
     st.session_state.stage = stage
+    st.session_state.rating_step = "emotion"
     st.session_state.rest_start_time = None
     st.session_state.rest_end_time = None
     st.session_state.clip_start_time = None
     st.session_state.clip_end_time = None
     st.session_state.rest_sample_count = 0
     st.session_state.listen_sample_count = 0
+    st.session_state.rating_error = ""
 
 
 def current_clip(clips: pd.DataFrame) -> pd.Series:
@@ -254,10 +253,63 @@ def current_clip(clips: pd.DataFrame) -> pd.Series:
     return clips[clips["clip_id"].astype(str) == clip_id].iloc[0]
 
 
-def move_trial(delta: int) -> None:
+def move_trial(delta: int, *, stage: str = "rest") -> None:
     next_position = st.session_state.trial_position + delta
     st.session_state.trial_position = max(0, min(next_position, len(st.session_state.order) - 1))
-    reset_trial_state(stage="rest")
+    reset_trial_state(stage=stage)
+
+
+def rating_digit_key(clip_id: str, field: str) -> str:
+    return f"rating_digit_{clip_id}_{field}"
+
+
+def parse_digit(value: object, *, allowed: set[int]) -> int | None:
+    text = str(value).strip()
+    if not text.isdigit():
+        return None
+    number = int(text)
+    return number if number in allowed else None
+
+
+def saved_emotion_value(saved: pd.Series | None) -> str:
+    if saved is None:
+        return ""
+    mood = str(saved_field(saved, "mood", "")).strip().lower()
+    for number, label in EMOTION_LABELS.items():
+        if mood == label:
+            return str(number)
+
+    value = saved_int(saved, "valence", 2)
+    if value in EMOTION_LABELS:
+        return str(value)
+    if value <= 2:
+        return "1"
+    if value >= 4:
+        return "3"
+    return "2"
+
+
+def saved_familiarity_value(saved: pd.Series | None) -> str:
+    if saved is None:
+        return ""
+    value = saved_int(saved, "familiarity", 3)
+    return str(max(1, min(value, 5)))
+
+
+def rating_inputs_are_valid(clip_id: str) -> tuple[int | None, int | None]:
+    emotion = parse_digit(
+        st.session_state.get(rating_digit_key(clip_id, "emotion"), ""),
+        allowed=set(EMOTION_LABELS),
+    )
+    familiarity = parse_digit(
+        st.session_state.get(rating_digit_key(clip_id, "familiarity"), ""),
+        allowed=set(FAMILIARITY_LABELS),
+    )
+    return emotion, familiarity
+
+
+def choose_digit_button(label: str, value: int, *, key: str) -> bool:
+    return full_width_button(f"{value}. {label}", key=key)
 
 
 def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
@@ -266,8 +318,10 @@ def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
     clip_id = str(clip["clip_id"])
     trial_index = int(st.session_state.trial_position + 1)
     saved = existing_label(labels, user_id, session_id, clip_id)
-    mood = str(st.session_state.get(rating_key(clip_id, "mood"), saved_field(saved, "mood", "neutral")))
-    other_mood = str(st.session_state.get(rating_key(clip_id, "other_mood"), "")).strip()
+    emotion, familiarity = rating_inputs_are_valid(clip_id)
+    if emotion is None or familiarity is None:
+        raise ValueError("Enter emotion as 1, 2, or 3 and familiarity as 1 through 5.")
+    mood = EMOTION_LABELS[emotion]
     row = {
         "user_id": user_id,
         "session_id": session_id,
@@ -277,15 +331,47 @@ def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
         "rest_end_time": st.session_state.rest_end_time or saved_field(saved, "rest_end_time", ""),
         "clip_start_time": st.session_state.clip_start_time or saved_field(saved, "clip_start_time", iso_now()),
         "clip_end_time": st.session_state.clip_end_time or saved_field(saved, "clip_end_time", iso_now()),
-        "preference": int(st.session_state.get(rating_key(clip_id, "preference"), saved_int(saved, "preference", 3))),
-        "arousal": int(st.session_state.get(rating_key(clip_id, "arousal"), saved_int(saved, "arousal", 3))),
-        "valence": int(st.session_state.get(rating_key(clip_id, "valence"), saved_int(saved, "valence", 3))),
-        "mood": other_mood if mood == "other" and other_mood else mood,
-        "familiarity": int(st.session_state.get(rating_key(clip_id, "familiarity"), saved_int(saved, "familiarity", 3))),
-        "notes": str(st.session_state.get(rating_key(clip_id, "notes"), saved_field(saved, "notes", ""))).strip(),
+        "preference": "",
+        "arousal": "",
+        "valence": emotion,
+        "mood": mood,
+        "familiarity": familiarity,
+        "notes": "",
     }
     write_label_row(row, label_path(session_id))
     st.cache_data.clear()
+
+
+def save_rating_and_advance(clip: pd.Series, labels: pd.DataFrame, total: int) -> None:
+    clip_id = str(clip["clip_id"])
+    emotion, familiarity = rating_inputs_are_valid(clip_id)
+    if emotion is None or familiarity is None:
+        st.session_state.rating_error = "Emotion must be 1-3 and familiarity must be 1-5."
+        return
+
+    save_current_rating(clip, labels)
+    st.session_state.rating_error = ""
+    if st.session_state.trial_position >= total - 1:
+        st.session_state.stage = "complete"
+    else:
+        move_trial(1)
+
+
+def set_rating_digit_and_advance(
+    *,
+    clip: pd.Series,
+    labels: pd.DataFrame,
+    total: int,
+    field: str,
+    value: int,
+) -> None:
+    clip_id = str(clip["clip_id"])
+    st.session_state[rating_digit_key(clip_id, field)] = str(value)
+    st.session_state.rating_error = ""
+    if field == "emotion":
+        st.session_state.rating_step = "familiarity"
+    else:
+        save_rating_and_advance(clip, labels, total)
 
 
 def open_sensor_reader() -> MockSensorReader | SerialSensorReader:
@@ -372,7 +458,7 @@ def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None
     prev_col, center_col, next_col = st.columns([1, 2, 1])
     with prev_col:
         if full_width_button("← Previous", disabled=st.session_state.trial_position == 0):
-            move_trial(-1)
+            move_trial(-1, stage="rate")
             st.rerun()
     with center_col:
         st.progress(
@@ -381,13 +467,75 @@ def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None
         )
     with next_col:
         label = "Finish" if is_last else "Next →"
-        if full_width_button(label, disabled=is_last and stage != "rate"):
+        if full_width_button(label, disabled=stage != "rate"):
             if stage == "rate":
-                save_current_rating(clip, labels)
+                try:
+                    save_current_rating(clip, labels)
+                except ValueError as exc:
+                    st.session_state.rating_error = str(exc)
+                    st.rerun()
             if is_last:
                 st.session_state.stage = "complete"
             else:
                 move_trial(1)
+            st.rerun()
+
+
+def render_rating_flashcard(clip: pd.Series, labels: pd.DataFrame, saved: pd.Series | None) -> None:
+    clip_id = str(clip["clip_id"])
+    total = len(st.session_state.order)
+    emotion_key = rating_digit_key(clip_id, "emotion")
+    familiarity_key = rating_digit_key(clip_id, "familiarity")
+    if emotion_key not in st.session_state:
+        st.session_state[emotion_key] = saved_emotion_value(saved)
+    if familiarity_key not in st.session_state:
+        st.session_state[familiarity_key] = saved_familiarity_value(saved)
+
+    step = st.session_state.get("rating_step", "emotion")
+    if step not in {"emotion", "familiarity"}:
+        step = "emotion"
+        st.session_state.rating_step = step
+
+    if step == "emotion":
+        current = st.session_state.get(emotion_key, "")
+        st.subheader("Emotion?")
+        st.markdown("### Click one answer")
+        st.caption("1 = sad | 2 = neutral | 3 = happy")
+        if current:
+            st.caption(f"Current saved answer: {current}")
+        cols = st.columns(3)
+        for index, (value, label) in enumerate(EMOTION_LABELS.items()):
+            with cols[index]:
+                if choose_digit_button(label, value, key=f"emotion_{clip_id}_{value}"):
+                    set_rating_digit_and_advance(
+                        clip=clip,
+                        labels=labels,
+                        total=total,
+                        field="emotion",
+                        value=value,
+                    )
+                    st.rerun()
+        return
+
+    current = st.session_state.get(familiarity_key, "")
+    emotion = st.session_state.get(emotion_key, "")
+    st.subheader("Familiarity?")
+    st.markdown("### Click one answer")
+    emotion_number = parse_digit(emotion, allowed=set(EMOTION_LABELS))
+    if emotion_number is not None:
+        st.caption(f"Emotion: {emotion_number} ({EMOTION_LABELS[emotion_number]})")
+    if current:
+        st.caption(f"Current saved answer: {current}")
+
+    for value, label in FAMILIARITY_LABELS.items():
+        if choose_digit_button(label, value, key=f"familiarity_{clip_id}_{value}"):
+            set_rating_digit_and_advance(
+                clip=clip,
+                labels=labels,
+                total=total,
+                field="familiarity",
+                value=value,
+            )
             st.rerun()
 
 
@@ -402,40 +550,36 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
         st.success("This song already has a saved rating. You can overwrite it or move to another song.")
 
     st.subheader(f"{clip['track_name']} - {clip['artist']}")
-    st.caption("Training flow: record baseline rest, record the music response, then rate the song.")
+    st.caption("Training flow: record baseline rest, record the music response, then enter two quick ratings.")
 
     stage = st.session_state.get("stage", "rest")
     if stage == "rest":
-        st.info("Rest quietly for 30 seconds. Raspberry Pi Seeed GSR samples are saved now; Apple Watch HR can be imported after the run.")
-        if full_width_button("Record 30s rest baseline"):
-            try:
-                start_time, end_time, sample_count = capture_sensor_phase(
-                    phase="rest",
-                    duration_seconds=REST_SECONDS,
-                    clip_id=clip_id,
-                    trial_index=trial_index,
-                )
-            except Exception as exc:
-                st.error(str(exc))
-                return
-            st.session_state.rest_start_time = start_time
-            st.session_state.rest_end_time = end_time
-            st.session_state.rest_sample_count = sample_count
-            st.session_state.stage = "listen"
-            st.rerun()
+        st.info("Rest period started. Sit quietly until the song begins automatically.")
+        try:
+            start_time, end_time, sample_count = capture_sensor_phase(
+                phase="rest",
+                duration_seconds=REST_SECONDS,
+                clip_id=clip_id,
+                trial_index=trial_index,
+            )
+        except Exception as exc:
+            st.error(str(exc))
+            return
+        st.session_state.rest_start_time = start_time
+        st.session_state.rest_end_time = end_time
+        st.session_state.rest_sample_count = sample_count
+        st.session_state.stage = "recording"
+        st.rerun()
         return
 
     if stage == "listen":
-        st.audio(str(clip["preview_url"]))
-        st.info("Click once to start the preview and sensor recording together.")
-        if full_width_button("Start song + record sensors"):
-            st.session_state.stage = "recording"
-            st.rerun()
+        st.session_state.stage = "recording"
+        st.rerun()
         return
 
     if stage == "recording":
         st.audio(str(clip["preview_url"]), autoplay=True)
-        st.info("Recording the 30-second song response. If your browser blocks autoplay, press play immediately.")
+        st.info("Song recording started. If your browser blocks autoplay, press play immediately.")
         try:
             start_time, end_time, sample_count = capture_sensor_phase(
                 phase="listen",
@@ -451,62 +595,13 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
         st.session_state.clip_end_time = end_time
         st.session_state.listen_sample_count = sample_count
         st.session_state.stage = "rate"
+        st.session_state.rating_step = "emotion"
         st.rerun()
 
     if stage == "rate":
-        default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
-        st.subheader("Rate this song")
-        st.caption("Adjust the sliders, then click Next. The numeric sliders are the training labels.")
-        st.slider(
-            "Preference",
-            1,
-            5,
-            saved_int(saved, "preference", 3),
-            help="1 = disliked it, 5 = liked it a lot",
-            key=rating_key(clip_id, "preference"),
-        )
-        st.slider(
-            "Arousal",
-            1,
-            5,
-            saved_int(saved, "arousal", 3),
-            help="1 = calm/sleepy, 5 = energized/hyped",
-            key=rating_key(clip_id, "arousal"),
-        )
-        st.slider(
-            "Valence",
-            1,
-            5,
-            saved_int(saved, "valence", 3),
-            help="1 = negative/unpleasant/sad, 5 = positive/pleasant/happy",
-            key=rating_key(clip_id, "valence"),
-        )
-        mood = st.selectbox(
-            "Mood tag (optional)",
-            MOOD_OPTIONS,
-            index=MOOD_OPTIONS.index(default_mood),
-            help="A human-readable tag for notes/demo. The model primarily uses the numeric ratings.",
-            key=rating_key(clip_id, "mood"),
-        )
-        if mood == "other":
-            st.text_input(
-                "Mood detail",
-                value=str(saved_field(saved, "mood", "")) if default_mood == "other" else "",
-                key=rating_key(clip_id, "other_mood"),
-            )
-        st.slider(
-            "Familiarity",
-            1,
-            5,
-            saved_int(saved, "familiarity", 3),
-            help="1 = unfamiliar, 5 = very familiar",
-            key=rating_key(clip_id, "familiarity"),
-        )
-        st.text_area(
-            "Notes",
-            value=str(saved_field(saved, "notes", "")),
-            key=rating_key(clip_id, "notes"),
-        )
+        render_rating_flashcard(clip, labels, saved)
+        if st.session_state.get("rating_error"):
+            st.error(st.session_state.rating_error)
         return
 
     if full_width_button("Reset this trial"):

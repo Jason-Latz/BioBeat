@@ -72,9 +72,20 @@ def read_labels(labels_dir: Path) -> pd.DataFrame:
 
 def add_binary_labels(table: pd.DataFrame) -> pd.DataFrame:
     table = table.copy()
-    for column in ("preference", "arousal", "valence"):
+    for column in ("preference", "arousal"):
         table[column] = pd.to_numeric(table[column], errors="coerce")
-        table[f"{column}_binary"] = (table[column] >= 4).astype(int)
+        binary = pd.Series(pd.NA, index=table.index)
+        labeled = table[column].notna()
+        binary.loc[labeled] = (table.loc[labeled, column] >= 4).astype(int)
+        table[f"{column}_binary"] = binary
+
+    table["valence"] = pd.to_numeric(table["valence"], errors="coerce")
+    mood = table.get("mood", pd.Series("", index=table.index)).astype(str).str.strip().str.lower()
+    binary = pd.Series(pd.NA, index=table.index)
+    labeled = table["valence"].notna()
+    positive = (table["valence"] >= 4) | ((table["valence"] == 3) & mood.eq("happy"))
+    binary.loc[labeled] = positive.loc[labeled].astype(int)
+    table["valence_binary"] = binary
     return table
 
 

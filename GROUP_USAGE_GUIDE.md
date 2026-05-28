@@ -15,10 +15,10 @@ BioBeat is currently a training data collector.
 
 For each song it:
 
-1. Records 30 seconds of rest/baseline sensor data.
+1. Records 20 seconds of rest/baseline sensor data.
 2. Plays a 30-second iTunes preview.
 3. Records GSR/EDA during the song and leaves room for Apple Watch HRV to be imported later.
-4. Asks you to rate how you felt.
+4. Asks for quick emotion and familiarity ratings.
 5. Saves the labels and raw sensor samples.
 
 After that, Python scripts turn the saved data into features and train simple models.
@@ -110,10 +110,9 @@ Then:
 5. Choose `Raspberry Pi Seeed GSR serial` if the sensor team has the Pico serial stream connected.
 6. Click `Begin / restart session`.
 7. For each song:
-   - record 30 seconds of rest
-   - click `Start song + record sensors`
-   - the app starts the song preview and records 30 seconds of song GSR response
-   - rate the song, then click `Next` to save and move on
+   - the app automatically records 20 seconds of rest
+   - the app automatically starts the song preview and records 30 seconds of song GSR response
+   - click one emotion button and one familiarity button; after that, the app saves and moves to the next rest period
 8. Stop the Apple Watch Workout after the last song, export heart-rate data as CSV, and upload it on the completion screen.
 
 The app saves as you go.
@@ -134,31 +133,19 @@ data/raw/sensor/{session_id}_sensor.csv
 
 You rate each song after hearing it.
 
-`preference`: how much you liked it.
+`emotion`: how the song made you feel.
 
-- `1` = disliked it
-- `5` = liked it a lot
+- `1` = sad
+- `2` = neutral
+- `3` = happy
 
-`arousal`: how activated or energized you felt.
+`familiarity`: how familiar the song felt.
 
-- `1` = calm/sleepy
-- `5` = energized/hyped
-
-`valence`: how positive or negative the feeling was.
-
-- `1` = negative/unpleasant/sad
-- `5` = positive/pleasant/happy
-
-Valence is not the same as arousal. A song can be:
-
-- low arousal, positive valence: calm and pleasant
-- low arousal, negative valence: sad or heavy
-- high arousal, positive valence: exciting
-- high arousal, negative valence: tense or stressful
-
-For the project, arousal is the main target because HR and EDA are most directly related to activation. Valence is secondary and harder to predict, but it helps separate “calm and pleasant” from “calm and sad.”
-
-`mood` is different from valence. Mood is just an optional human-readable tag, like `sad`, `relaxed`, or `excited`. Valence is the numeric training label. If you are unsure, trust the valence slider and pick the closest mood tag.
+- `1` = never heard it before
+- `2` = maybe recognize it
+- `3` = have heard it a few times
+- `4` = know it well
+- `5` = very familiar / personally meaningful / know what is coming
 
 ## Do You Need To Rate The Songs Yourself?
 
