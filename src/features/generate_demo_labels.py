@@ -34,11 +34,11 @@ LABEL_COLUMNS = [
 AROUSAL_BASE = {"low": 2, "medium": 3, "high": 5}
 VALENCE_BASE = {"negative": 2, "neutral": 3, "positive": 4}
 MOOD_BY_LABEL = {
-    ("high", "positive"): ["excited", "happy"],
-    ("medium", "positive"): ["happy", "relaxed", "neutral"],
+    ("high", "positive"): ["excited", "positive"],
+    ("medium", "positive"): ["positive", "relaxed", "neutral"],
     ("low", "positive"): ["relaxed", "neutral"],
-    ("low", "negative"): ["sad", "relaxed"],
-    ("medium", "negative"): ["tense", "annoyed", "sad"],
+    ("low", "negative"): ["negative", "relaxed"],
+    ("medium", "negative"): ["tense", "annoyed", "negative"],
     ("high", "negative"): ["tense", "annoyed"],
 }
 

@@ -31,8 +31,8 @@ LABEL_COLUMNS = [
 ]
 
 MOOD_OPTIONS = [
-    "happy",
-    "sad",
+    "positive",
+    "negative",
     "relaxed",
     "tense",
     "excited",

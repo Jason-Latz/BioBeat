@@ -83,7 +83,9 @@ def add_binary_labels(table: pd.DataFrame) -> pd.DataFrame:
     mood = table.get("mood", pd.Series("", index=table.index)).astype(str).str.strip().str.lower()
     binary = pd.Series(pd.NA, index=table.index)
     labeled = table["valence"].notna()
-    positive = (table["valence"] >= 4) | ((table["valence"] == 3) & mood.eq("happy"))
+    positive = (table["valence"] >= 4) | (
+        (table["valence"] == 3) & mood.isin({"positive", "happy"})
+    )
     binary.loc[labeled] = positive.loc[labeled].astype(int)
     table["valence_binary"] = binary
     return table
