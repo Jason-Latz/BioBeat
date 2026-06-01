@@ -10,8 +10,8 @@ The short version is:
 - The repository contains all raw captures, checkpoints, labels, recovery queues, and quality-audit tooling collected so far.
 - There are `109` usable real human ratings.
 - There is currently **no GSR/EDA block approved for primary biometric training** because the first real run used the sensor with an incorrect fit and the second real run contained a disconnected-lead artifact.
-- There are `41` unrated deep-cut songs ready to collect after a one-song hardware dry run passes.
-- There are `49` already-rated deep-cut songs that can be recollected later if time permits.
+- There are `41` unrated deep-cut songs and `49` already-rated deep-cut songs in the existing recovery queues.
+- Jason's next collection request is broader: preserve the historical data, then rerecord the full `240`-clip catalog in explicit descending clip order so deeper-cut and previously uncollected songs are recorded first.
 - Do not resume the currently running continuation collector blindly. Validate the repaired hardware first.
 
 ## 1. Current State
@@ -817,6 +817,36 @@ Familiarity is a confounder:
 
 ## 9. Next Safe Collection Plan
 
+### Updated Direction: Clean Reverse Rerecord
+
+Jason requested a fresh rerecord of the complete catalog while keeping all historical data. The new run should start at the back of the catalog and work forward:
+
+```text
+clip_240
+clip_239
+...
+clip_001
+```
+
+This intentionally prioritizes the newer deeper-cut material before the older broadly recognizable songs.
+
+Do not overwrite or delete any existing raw CSV. Every new run must use a fresh session ID so it writes separate files.
+
+The dashboard currently shuffles clips deterministically from the session ID. Before starting the clean rerecord, add an explicit ordered-run mode and generate descending batch CSVs. Keep shuffle behavior as the default for unrelated runs.
+
+Do not record all `240` clips as one uninterrupted session. A single full run would take several hours and would make another unnoticed hardware failure expensive. Generate six descending `40`-clip blocks:
+
+| Block | Descending clip range |
+| --- | --- |
+| `01` | `clip_240` through `clip_201` |
+| `02` | `clip_200` through `clip_161` |
+| `03` | `clip_160` through `clip_121` |
+| `04` | `clip_120` through `clip_081` |
+| `05` | `clip_080` through `clip_041` |
+| `06` | `clip_040` through `clip_001` |
+
+Run numerical EDA QC after the one-song hardware check and again between every block.
+
 ### Step 1: Fix Hardware Physically
 
 Jason should finish repairing and fitting the GSR/EDA hardware before any long collection.
@@ -844,43 +874,37 @@ PYTHONPATH=src .venv/bin/python src/sensors/audit_eda_quality.py data/raw/sensor
 
 The result should be inspected before Jason invests more time. A moving chart is not sufficient evidence.
 
-### Step 3: Collect the Unrated 41 Songs
+### Step 3: Prepare Ordered Reverse Batches
 
-After the one-song dry run passes, stop the existing server deliberately and start the isolated unrated queue:
+After the one-song dry run passes, stop the existing server deliberately. Add ordered-run support and generate the six descending batch CSVs before launching block `01`.
 
-```bash
-BIOBEAT_CLIPS_CSV=data/collection_batches/continuation_unrated_41.csv \
-PYTHONPATH=src \
-.venv/bin/streamlit run src/dashboard/batch_app.py \
-  --server.port 8503 \
-  --server.address 127.0.0.1
-```
+The launch command should preserve CSV order explicitly. Do not reuse the historical continuation launcher or rely on the session ID shuffle.
 
-Then manually open:
+### Step 4: Collect Reverse Blocks
+
+Start with block `01`, then move downward one block at a time. Use a new session ID for every block, for example:
 
 ```text
-http://127.0.0.1:8503/
+clean_reverse_b01_20260601
+clean_reverse_b02_20260601
 ```
 
-Start a new Apple Watch Workout and a fresh BioBeat session.
+Start a fresh Apple Watch Workout for each block so HR imports can be matched cleanly. After each block, stop and audit the saved EDA CSV before continuing.
 
-### Step 4: Import Apple Watch HR
+### Step 5: Import Apple Watch HR
 
-After a completed clean session, import or upload the Apple Watch HR CSV and verify per-song coverage before training.
+After each completed clean block, import or upload the corresponding Apple Watch HR CSV and verify per-song coverage before training.
 
-### Step 5: Recollect the Affected 49 Songs If Time Permits
+### Existing Recovery Queues
 
-Use:
+The earlier recovery queues remain useful historical artifacts:
 
 ```text
+data/collection_batches/continuation_unrated_41.csv
 data/collection_batches/continuation_recollect_49.csv
 ```
 
-Do this as a separate new session.
-
-### Step 6: Reconsider Original 60 Songs
-
-The original `60` mixed-familiarity ratings are still useful. Recollect their biometrics only if the project timeline and modeling goals justify the extra hour.
+The new reverse full-catalog rerecord supersedes them as the primary next collection plan.
 
 ## 10. Operational Rules For Future Chats
 
@@ -1011,4 +1035,4 @@ What is not valid yet:
 - imported Apple Watch HR for the real sessions
 - a clean real multimodal biometric model
 
-The correct next move is not to discard the ratings or restart the entire project. It is to validate the repaired hardware with one song, collect the unrated `41` songs cleanly, import HR, and only then decide how much recollection is needed.
+The correct next move is not to discard the ratings. Preserve the historical files, add ordered-run support, validate the repaired hardware with one song, and rerecord the full catalog in descending `40`-song blocks with EDA QC between blocks.

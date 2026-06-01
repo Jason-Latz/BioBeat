@@ -62,11 +62,12 @@ Do not leave that learning only in chat history.
 - Before finalizing BioBeat documentation, exports, or recovery queues, check raw CSV modification times and `git status`. An open Streamlit continuation session can append a later rating or capture after an earlier checkpoint.
 - Name BioBeat recovery queues by verified state. Use `unrated`, not `untouched`, when a queue can include a song that was played during an unrated sensor capture.
 - Quote shell search patterns containing Markdown backticks with single quotes. Unquoted backticks trigger shell command substitution and invalidate the check.
+- For Jason's next BioBeat clean rerecord, preserve every historical raw file and use new session IDs. Collect the full catalog in explicit descending clip order so deeper-cut and previously uncollected songs are recorded first.
+- Do not run Jason's full clean rerecord as one uninterrupted 240-song session. Use bounded reverse-order blocks with a hardware-fit dry run before block 1 and numerical EDA QC between blocks.
 
 ## Active Issues Before Next Attempt
 
 - The intended collector URL is `http://127.0.0.1:8503/`. A historical continuation launcher may still be running there with `data/collection_batches/continuation_deep_cuts_90.csv`; do not resume that page blindly.
 - Before another long take, run a fresh one-song hardware-fit dry run in a new session and audit the saved EDA numerically. Trial `50` of `self_20260531_220954` was a later hardware-check attempt, but it remains unverified.
-- The current next clean batch is `data/collection_batches/continuation_unrated_41.csv`. It contains `40` never-played songs plus `clip_209`, which was captured during unrated trial `50`.
-- The later recollection batch is `data/collection_batches/continuation_recollect_49.csv`.
+- Jason requested a clean rerecord of the full catalog in descending clip order so deeper-cut and previously uncollected songs are captured first. The reverse-order batch files and ordered-run mode still need to be created before collection starts.
 - Apple Watch HR has not yet been imported into either real session.
