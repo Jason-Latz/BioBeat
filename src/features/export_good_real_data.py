@@ -14,6 +14,7 @@ from sensors.audit_eda_quality import classify, read_trial_values  # noqa: E402
 REAL_SESSIONS = (
     "self_20260531_155844",
     "self_20260531_220954",
+    "self_20260601_112658",
 )
 GOOD_REAL_DATA_CSV = PROCESSED_DIR / "good_real_data.csv"
 EDA_QUALITY_MANIFEST_CSV = PROCESSED_DIR / "real_eda_quality_manifest.csv"
@@ -73,28 +74,40 @@ def collection_quality(session_id: str, trial_index: int, has_rating: bool) -> t
     if not has_rating:
         return "excluded_unrated_capture", "No saved human rating exists for this sensor capture."
 
+    if session_id == "self_20260601_112658":
+        return (
+            "approved_clean_reverse_verified",
+            "",
+        )
+
     if session_id == "self_20260531_155844":
         return (
             "excluded_wrong_sensor_fit",
             "Sensor readings are structurally plausible, but the sensor was worn incorrectly.",
         )
 
-    if 1 <= trial_index <= 16:
-        return (
-            "excluded_questionable_sensor_fit",
-            "Sensor placement was still being corrected during this block.",
-        )
-    if 17 <= trial_index <= 31 or 36 <= trial_index <= 48:
-        return (
-            "excluded_disconnected_lead_artifact",
-            "Disconnected lead produced a repetitive artificial oscillation.",
-        )
-    if 32 <= trial_index <= 35:
-        return (
-            "excluded_reconnection_transient",
-            "Brief reconnection window is too transient to trust as primary biometric data.",
-        )
+    if session_id == "self_20260531_220954":
+        if 1 <= trial_index <= 16:
+            return (
+                "excluded_questionable_sensor_fit",
+                "Sensor placement was still being corrected during this block.",
+            )
+        if 17 <= trial_index <= 31 or 36 <= trial_index <= 48:
+            return (
+                "excluded_disconnected_lead_artifact",
+                "Disconnected lead produced a repetitive artificial oscillation.",
+            )
+        if 32 <= trial_index <= 35:
+            return (
+                "excluded_reconnection_transient",
+                "Brief reconnection window is too transient to trust as primary biometric data.",
+            )
+
     return "excluded_unverified_capture", "Capture has not been verified for primary biometric training."
+
+
+def use_primary_eda(quality: str) -> bool:
+    return quality.startswith("approved_")
 
 
 def export_good_real_data(
@@ -117,6 +130,7 @@ def export_good_real_data(
             label = labels_by_trial.get(trial_index)
             serial_status, _, _ = classify(values)
             quality, reason = collection_quality(session_id, trial_index, label is not None)
+            use_eda = use_primary_eda(quality)
             manifest_rows.append(
                 {
                     "session_id": session_id,
@@ -125,7 +139,7 @@ def export_good_real_data(
                     "has_rating": "yes" if label else "no",
                     "serial_pattern_quality": serial_status,
                     "collection_quality": quality,
-                    "use_eda_for_primary_biometric_training": "no",
+                    "use_eda_for_primary_biometric_training": "yes" if use_eda else "no",
                     "exclusion_reason": reason,
                 }
             )
@@ -133,6 +147,7 @@ def export_good_real_data(
         for trial_index, label in sorted(labels_by_trial.items()):
             clip = clips[label["clip_id"]]
             quality, reason = collection_quality(session_id, trial_index, True)
+            use_eda = use_primary_eda(quality)
             curated_rows.append(
                 {
                     **label,
@@ -141,9 +156,9 @@ def export_good_real_data(
                     "artist": clip.get("artist", ""),
                     "genre": clip.get("genre", ""),
                     "rating_usable": "yes",
-                    "data_scope": "human_rating_only",
+                    "data_scope": "human_rating_and_verified_eda" if use_eda else "human_rating_only",
                     "eda_quality": quality,
-                    "use_eda_for_primary_biometric_training": "no",
+                    "use_eda_for_primary_biometric_training": "yes" if use_eda else "no",
                     "eda_exclusion_reason": reason,
                 }
             )
