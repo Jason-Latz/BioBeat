@@ -108,7 +108,7 @@ Then:
 3. Enter a `session_id`, like `jason_s01`.
 4. Choose `Mock sensor` if hardware is not ready.
 5. Choose `Raspberry Pi Seeed GSR serial` if the sensor team has the Pico serial stream connected.
-6. Click `Begin / restart session`.
+6. Click `Begin session`.
 7. For each song:
    - the app automatically records 20 seconds of rest
    - the app automatically starts the song preview and records 30 seconds of song GSR response
@@ -135,9 +135,9 @@ You rate each song after hearing it.
 
 `emotion`: how the song made you feel.
 
-- `1` = sad
+- `1` = negative
 - `2` = neutral
-- `3` = happy
+- `3` = positive
 
 `familiarity`: how familiar the song felt.
 
