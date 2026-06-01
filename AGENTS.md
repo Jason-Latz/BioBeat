@@ -67,13 +67,16 @@ Do not leave that learning only in chat history.
 - For ordered BioBeat batch collection, launch `src/dashboard/batch_app.py` with `BIOBEAT_CLIP_ORDER=csv`. Leave the default shuffle mode intact for unrelated runs.
 - When Jason finishes a BioBeat dry run, discover the actual newest raw sensor CSV before auditing it. The dashboard defaults to an auto-generated `self_YYYYMMDD_HHMMSS` session ID unless Jason manually replaces the field.
 - In zsh validation snippets, do not use `path` as a local variable name. zsh ties `path` to `PATH`, so assigning it can make commands such as `tail` unavailable.
+- For BioBeat blocks collected by another person on another computer, publish a deterministic checked launcher and a concise remote runbook. Require a distinct participant ID, a fresh session ID, a one-song hardware check, and numerical EDA audit on that computer before the long block starts.
+- Clean-reverse block `01` session `self_20260601_112658` is the cleanest real EDA block collected so far. Preserve it as a primary biometric-training candidate while keeping Apple Watch HR import status separate.
 
 ## Active Issues Before Next Attempt
 
 - The intended collector URL is `http://127.0.0.1:8503/`.
-- The historical continuation launcher was stopped before clean-reverse preparation. Relaunch `8503` with `BIOBEAT_CLIP_ORDER=csv` and the intended clean-reverse batch only.
+- No local collector server is running after completed clean-reverse block `01`.
 - The latest clean-reverse hardware check is `data/raw/sensor/self_20260601_111921_sensor.csv`. It passed the disconnected-lead screen numerically, and Jason manually confirmed corrected placement and firm lead attachment before block `01`.
-- Clean reverse block `01` is `data/collection_batches/clean_reverse_b01_240_201.csv`, launched on `8503` with `BIOBEAT_CLIP_ORDER=csv`. Audit the completed block before launching block `02`.
-- The six clean reverse queues are `data/collection_batches/clean_reverse_b01_240_201.csv` through `data/collection_batches/clean_reverse_b06_040_001.csv`.
+- Clean reverse block `01` is complete as session `self_20260601_112658`. Its `40` labels and `97840` EDA rows passed the completed-block integrity audit and are checkpointed in `data/archive/clean_reverse_b01_20260601_120832/`.
+- Clean reverse block `02` is the doubled remote-collector queue `data/collection_batches/clean_reverse_b02_200_121.csv`: exactly `80` ordered songs. The remote collector must follow `REMOTE_BLOCK02_RUNBOOK.md`.
+- The five clean reverse queues are `data/collection_batches/clean_reverse_b01_240_201.csv` through `data/collection_batches/clean_reverse_b05_040_001.csv`.
 - The pre-rerecord snapshot is `data/archive/pre_clean_reverse_20260601_002708/`.
-- Apple Watch HR has not yet been imported into either real session.
+- Apple Watch HR has not yet been imported into any real session.

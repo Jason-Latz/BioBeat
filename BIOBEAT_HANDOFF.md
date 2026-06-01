@@ -8,11 +8,11 @@ The short version is:
 
 - The collector and song catalog are working.
 - The repository contains all raw captures, checkpoints, labels, recovery queues, and quality-audit tooling collected so far.
-- There are `109` usable real human ratings.
-- There is currently **no GSR/EDA block approved for primary biometric training** because the first real run used the sensor with an incorrect fit and the second real run contained a disconnected-lead artifact.
+- There are `149` usable real human ratings.
+- Clean-reverse block `01` is the first GSR/EDA block approved as a primary biometric-training candidate. It is the cleanest real EDA block collected so far.
 - There are `41` unrated deep-cut songs and `49` already-rated deep-cut songs in the existing recovery queues.
-- Jason's next collection request is broader: preserve the historical data, then rerecord the full `240`-clip catalog in explicit descending clip order so deeper-cut and previously uncollected songs are recorded first.
-- Do not resume the currently running continuation collector blindly. Validate the repaired hardware first.
+- Jason's current collection plan is to finish rerecording the full `240`-clip catalog in explicit descending clip order so deeper-cut and previously uncollected songs are recorded first.
+- Clean-reverse block `02` is an `80`-song remote-collector block. The other collector must follow `REMOTE_BLOCK02_RUNBOOK.md`, including the one-song hardware check and numerical audit on that computer.
 
 ## 1. Current State
 
@@ -97,7 +97,7 @@ The second failure did **not** produce a flat line. It produced a large, repetit
 
 ### Apple Watch Heart Rate
 
-Apple Watch HR has not been imported into either real session yet.
+Apple Watch HR has not been imported into any real session yet.
 
 Verified active real sensor files:
 
@@ -105,6 +105,7 @@ Verified active real sensor files:
 | --- | ---: | ---: | ---: | ---: |
 | `self_20260531_155844` | `149212` | `61` | `149212` | `0` |
 | `self_20260531_220954` | `122322` | `50` | `122322` | `0` |
+| `self_20260601_112658` | `97840` | `40` | `97840` | `0` |
 
 The raw files currently contain Raspberry Pi Seeed GSR/EDA rows only:
 
@@ -507,30 +508,31 @@ match_score
 ```text
 data/raw/labels/self_20260531_155844_labels.csv
 data/raw/labels/self_20260531_220954_labels.csv
+data/raw/labels/self_20260601_112658_labels.csv
 ```
 
 Combined real ratings:
 
 ```text
-109
+149
 ```
 
 Current real human-label distribution:
 
 | Mood | Count |
 | --- | ---: |
-| `negative` | `38` |
-| `neutral` | `53` |
-| `positive` | `18` |
+| `negative` | `56` |
+| `neutral` | `68` |
+| `positive` | `25` |
 
 Combined familiarity distribution:
 
 | Familiarity | Count |
 | --- | ---: |
-| `1` | `68` |
-| `2` | `3` |
+| `1` | `105` |
+| `2` | `5` |
 | `3` | `6` |
-| `4` | `26` |
+| `4` | `27` |
 | `5` | `6` |
 
 ### Active Real Sensor CSVs
@@ -538,6 +540,7 @@ Combined familiarity distribution:
 ```text
 data/raw/sensor/self_20260531_155844_sensor.csv
 data/raw/sensor/self_20260531_220954_sensor.csv
+data/raw/sensor/self_20260601_112658_sensor.csv
 ```
 
 Sensor schema:
@@ -569,19 +572,19 @@ This is the best single CSV for a future chat to inspect first.
 It contains:
 
 ```text
-109 rows
+149 rows
 ```
 
 Critical semantic warning:
 
-> `good_real_data.csv` means the human ratings are usable. It does **not** mean the current GSR/EDA readings are approved for primary biometric training.
+> `good_real_data.csv` means the human ratings are usable. Check each row's EDA fields before using biometrics: historical sessions remain excluded, while clean-reverse block `01` is approved.
 
 Every row explicitly includes:
 
 ```text
 rating_usable=yes
-data_scope=human_rating_only
-use_eda_for_primary_biometric_training=no
+data_scope
+use_eda_for_primary_biometric_training
 ```
 
 It also records:
@@ -600,12 +603,12 @@ data/processed/real_eda_quality_manifest.csv
 Contains:
 
 ```text
-111 sensor-capture rows
+151 sensor-capture rows
 ```
 
-Why `111`, not `109`:
+Why `151`, not `149`:
 
-- `109` rated trials
+- `149` rated trials
 - `2` additional captured but unrated trials
 
 Manifest collection-quality counts:
@@ -618,13 +621,14 @@ Manifest collection-quality counts:
 | `excluded_reconnection_transient` | `4` |
 | `excluded_unverified_capture` | `1` |
 | `excluded_unrated_capture` | `2` |
+| `approved_clean_reverse_verified` | `40` |
 
 Manifest serial-pattern counts:
 
 | Serial pattern | Rows |
 | --- | ---: |
 | `plausible` | `61` |
-| `questionable_noise_or_transient` | `22` |
+| `questionable_noise_or_transient` | `62` |
 | `invalid_lead_artifact` | `28` |
 
 The distinction matters:
@@ -803,7 +807,7 @@ Important limitations of the current real data:
 - The guided self-collector stores real `valence`, `mood`, and `familiarity`.
 - The guided self-collector currently leaves `preference` and `arousal` blank.
 - Apple Watch HR has not yet been imported.
-- No current real GSR/EDA block is approved for primary biometric training.
+- Clean-reverse block `01` is approved as the first primary EDA-training candidate.
 
 Therefore:
 
@@ -843,16 +847,15 @@ BIOBEAT_CLIP_ORDER=csv
 
 Use that setting for every clean reverse launch. Shuffle behavior remains the default for unrelated runs.
 
-Do not record all `240` clips as one uninterrupted session. A single full run would take several hours and would make another unnoticed hardware failure expensive. The generated descending `40`-clip blocks are:
+Do not record all `240` clips as one uninterrupted session. A single full run would take several hours and would make another unnoticed hardware failure expensive. Block `02` was deliberately doubled to `80` songs for a separate remote collector; the generated descending blocks are:
 
 | Block | Descending clip range | Batch CSV |
 | --- | --- | --- |
 | `01` | `clip_240` through `clip_201` | `data/collection_batches/clean_reverse_b01_240_201.csv` |
-| `02` | `clip_200` through `clip_161` | `data/collection_batches/clean_reverse_b02_200_161.csv` |
-| `03` | `clip_160` through `clip_121` | `data/collection_batches/clean_reverse_b03_160_121.csv` |
-| `04` | `clip_120` through `clip_081` | `data/collection_batches/clean_reverse_b04_120_081.csv` |
-| `05` | `clip_080` through `clip_041` | `data/collection_batches/clean_reverse_b05_080_041.csv` |
-| `06` | `clip_040` through `clip_001` | `data/collection_batches/clean_reverse_b06_040_001.csv` |
+| `02` | `clip_200` through `clip_121` | `data/collection_batches/clean_reverse_b02_200_121.csv` |
+| `03` | `clip_120` through `clip_081` | `data/collection_batches/clean_reverse_b03_120_081.csv` |
+| `04` | `clip_080` through `clip_041` | `data/collection_batches/clean_reverse_b04_080_041.csv` |
+| `05` | `clip_040` through `clip_001` | `data/collection_batches/clean_reverse_b05_040_001.csv` |
 
 Run numerical EDA QC after the one-song hardware check and again between every block.
 
@@ -938,9 +941,9 @@ Both one-song clean-reverse checks are preserved in:
 data/archive/clean_reverse_hardware_checks_20260601_112050/
 ```
 
-### Active Clean-Reverse Block
+### Completed Clean-Reverse Block 01
 
-Block `01` was launched on `http://127.0.0.1:8503/` after the numeric check and Jason's physical confirmation.
+Block `01` was completed as session `self_20260601_112658` after the numeric check and Jason's physical confirmation.
 
 ```text
 BIOBEAT_CLIPS_CSV=data/collection_batches/clean_reverse_b01_240_201.csv
@@ -955,7 +958,20 @@ clip_240 Roads - Portishead
 clip_201 So Hot You're Hurting My Feelings - Caroline Polachek
 ```
 
-Do not relaunch block `02` until block `01` has ended and its saved EDA CSV has been audited.
+The completed files are:
+
+```text
+data/raw/labels/self_20260601_112658_labels.csv
+data/raw/sensor/self_20260601_112658_sensor.csv
+```
+
+The block contains `40` saved labels and `97840` EDA rows. All `40` trials have no missing EDA values, no missing elapsed-time values, no non-positive elapsed-time steps, and an approximate `47.62 Hz` sampling rate. Median adjacent EDA changes range from `0.0033` through `0.0048`; adjacent-change fractions at or above `0.02` range from `0.025` through `0.062`.
+
+The conservative serial-pattern audit still labels these trials `questionable_noise_or_transient`, but the block is consistent across all songs and does not resemble the disconnected-lead artifact. This is the cleanest real BioBeat EDA block collected so far and the first approved primary biometric-training candidate. The immutable checkpoint is:
+
+```text
+data/archive/clean_reverse_b01_20260601_120832/
+```
 
 ### Step 3: Launch The First Ordered Reverse Block
 
@@ -976,7 +992,7 @@ Every later block launch must also set `BIOBEAT_CLIP_ORDER=csv`. Do not reuse th
 
 ### Step 4: Collect Reverse Blocks
 
-Start with block `01`, then move downward one block at a time. Use a new session ID for every block, for example:
+Block `01` is complete. Continue downward one block at a time. Use a new session ID for every block, for example:
 
 ```text
 clean_reverse_b01_20260601
@@ -984,6 +1000,13 @@ clean_reverse_b02_20260601
 ```
 
 Start a fresh Apple Watch Workout for each block so HR imports can be matched cleanly. After each block, stop and audit the saved EDA CSV before continuing.
+
+Block `02` will be collected by another person on another computer. It is intentionally doubled to `80` songs. That collector must use a distinct participant ID, a fresh session ID, and:
+
+```text
+REMOTE_BLOCK02_RUNBOOK.md
+scripts/run_clean_reverse_block02_remote.sh
+```
 
 ### Step 5: Import Apple Watch HR
 
@@ -1108,6 +1131,14 @@ d31d5fe data: add raw sensor captures and checkpoints
 745fbb6 data: sync continuation hardware-check delta
 f1d9782 feat: support ordered batch collection
 dc614c7 data: add clean reverse rerecord queues and baseline archive
+9083f36 data: archive clean reverse hardware checks
+2708c21 docs: record latest reverse hardware check
+f2ff560 docs: record reverse block one launch
+ab7acad data: checkpoint clean reverse block one
+94ffcaa feat: approve verified clean reverse EDA export
+527035e data: refresh curated export with clean reverse block one
+b917d53 data: double clean reverse block two queue
+e450eee feat: add checked remote block two launcher
 ```
 
 ## 13. Final Interpretation
@@ -1116,19 +1147,19 @@ The work is not wasted.
 
 What is valid now:
 
-- `109` real human ratings
-- familiarity labels for all `109` rated songs
+- `149` real human ratings
+- familiarity labels for all `149` rated songs
+- `40` clean-reverse block `01` EDA trials approved as primary biometric-training candidates
 - a `240`-clip master registry
 - a validated `90`-song deeper-cut batch
 - `41` unrated deeper-cut songs ready for the next clean session
-- complete raw evidence for both real attempts
+- complete raw evidence for the historical attempts and clean-reverse block `01`
 - per-trial EDA quality labels
 - reproducible quality-audit and export tooling
 
 What is not valid yet:
 
-- a clean real GSR/EDA training set
 - imported Apple Watch HR for the real sessions
 - a clean real multimodal biometric model
 
-The correct next move is not to discard the ratings. Preserve the historical files, add ordered-run support, validate the repaired hardware with one song, and rerecord the full catalog in descending `40`-song blocks with EDA QC between blocks.
+The correct next move is to preserve the completed block `01` data and collect block `02` remotely from `clip_200` through `clip_121`. The remote collector must perform a fresh one-song hardware check and numerical EDA audit on that computer before beginning the `80`-song take.

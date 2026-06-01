@@ -68,7 +68,9 @@ For the audited real-session export, run:
 PYTHONPATH=src .venv/bin/python src/features/export_good_real_data.py
 ```
 
-This writes `data/processed/good_real_data.csv` with usable human ratings and `data/processed/real_eda_quality_manifest.csv` with the per-trial EDA audit. The current curated ratings export deliberately marks EDA as excluded from primary biometric training because the recorded sessions contain known sensor-fit and disconnected-lead issues.
+This writes `data/processed/good_real_data.csv` with usable human ratings and `data/processed/real_eda_quality_manifest.csv` with the per-trial EDA audit. Historical sessions with known sensor-fit and disconnected-lead issues remain excluded from primary biometric training. Verified clean-reverse sessions are marked as approved EDA candidates separately from Apple Watch HR import status.
+
+For the checked remote workflow for clean-reverse block `02`, read `REMOTE_BLOCK02_RUNBOOK.md`.
 
 The sensor feature extractor writes `data/processed/biometric_features_real.csv` using this schema:
 
