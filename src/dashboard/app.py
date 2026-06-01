@@ -28,11 +28,13 @@ from sensors.serial_readers import (  # noqa: E402
 
 REST_SECONDS = 20
 LISTEN_SECONDS = 30
+SENSOR_FLUSH_INTERVAL_SECONDS = 1.0
+PROGRESS_RENDER_INTERVAL_SECONDS = 0.1
 APPLE_WATCH_SOURCE = "apple_watch_csv"
 EMOTION_LABELS = {
-    1: "sad",
+    1: "negative",
     2: "neutral",
-    3: "happy",
+    3: "positive",
 }
 FAMILIARITY_LABELS = {
     1: "never heard it before",
@@ -275,6 +277,7 @@ def saved_emotion_value(saved: pd.Series | None) -> str:
     if saved is None:
         return ""
     mood = str(saved_field(saved, "mood", "")).strip().lower()
+    mood = {"sad": "negative", "happy": "positive"}.get(mood, mood)
     for number, label in EMOTION_LABELS.items():
         if mood == label:
             return str(number)
@@ -385,6 +388,7 @@ def open_sensor_reader() -> MockSensorReader | SerialSensorReader:
             baud_rate=int(st.session_state.get("baud_rate", 115200)),
             source="raspberry_pi_seeed_gsr",
             single_value_metric="eda",
+            require_sensor_elapsed_ms=True,
         )
     return MockSensorReader()
 
@@ -397,15 +401,29 @@ def capture_sensor_phase(
     trial_index: int,
 ) -> tuple[str, str, int]:
     reader = open_sensor_reader()
-    rows: list[dict[str, object]] = []
+    pending_rows: list[dict[str, object]] = []
+    sample_count = 0
     start_time = iso_now()
     start_monotonic = time.time()
+    sensor_file = sensor_path(st.session_state.session_id)
 
-    progress = st.progress(0.0, text=f"Recording {phase} sensor data")
+    phase_label = "Rest period" if phase == "rest" else "Song playback"
+    progress = st.progress(0.0, text=phase_label)
+    st.markdown("<div style='height: 100vh;'></div>", unsafe_allow_html=True)
+    st.caption("Live sensor monitor")
+    st.caption("Scroll down only when you want to check that the GSR/EDA signal is recording normally.")
     latest = st.empty()
     hr_chart = st.empty()
     eda_chart = st.empty()
     sample_frame = pd.DataFrame(columns=["elapsed_sec", "hr", "eda", "sensor_elapsed_ms"])
+    last_chart_render = 0.0
+    last_flush = 0.0
+    last_progress_render = 0.0
+
+    def flush_pending_rows() -> None:
+        if pending_rows:
+            append_sensor_rows(sensor_file, pending_rows)
+            pending_rows.clear()
 
     try:
         while True:
@@ -423,7 +441,8 @@ def capture_sensor_phase(
                     trial_index=trial_index,
                     phase=phase,
                 )
-                rows.append(row)
+                pending_rows.append(row)
+                sample_count += 1
                 sample_frame.loc[len(sample_frame)] = {
                     "elapsed_sec": round(elapsed, 2),
                     "hr": sample.hr,
@@ -431,25 +450,39 @@ def capture_sensor_phase(
                     "sensor_elapsed_ms": sample.sensor_elapsed_ms,
                 }
 
-                hr_text = "--" if sample.hr is None else f"{sample.hr:.1f} bpm"
-                eda_text = "--" if sample.eda is None else f"{sample.eda:.3f}"
-                if sample.hr is None and sample.sensor_elapsed_ms is not None:
-                    latest.metric("Latest GSR sample", f"EDA {eda_text}", f"{sample.sensor_elapsed_ms:.0f} ms")
-                else:
-                    latest.metric("Latest sample", f"HR {hr_text} / EDA {eda_text}")
-                if sample_frame["hr"].notna().any():
-                    hr_chart.line_chart(sample_frame[["elapsed_sec", "hr"]].dropna().set_index("elapsed_sec"), height=180)
-                if sample_frame["eda"].notna().any():
-                    eda_chart.line_chart(sample_frame[["elapsed_sec", "eda"]].dropna().set_index("elapsed_sec"), height=180)
+                if elapsed - last_flush >= SENSOR_FLUSH_INTERVAL_SECONDS:
+                    flush_pending_rows()
+                    last_flush = elapsed
 
-            progress.progress(min(elapsed / duration_seconds, 1.0), text=f"{phase.title()} recording: {max(0, int(duration_seconds - elapsed))}s remaining")
+                if elapsed - last_chart_render >= 0.25:
+                    hr_text = "--" if sample.hr is None else f"{sample.hr:.1f} bpm"
+                    eda_text = "--" if sample.eda is None else f"{sample.eda:.3f}"
+                    if sample.hr is None and sample.sensor_elapsed_ms is not None:
+                        latest.metric("Latest GSR sample", f"EDA {eda_text}", f"{sample.sensor_elapsed_ms:.0f} ms")
+                    else:
+                        latest.metric("Latest sample", f"HR {hr_text} / EDA {eda_text}")
+                    if sample_frame["hr"].notna().any():
+                        hr_chart.line_chart(sample_frame[["elapsed_sec", "hr"]].dropna().set_index("elapsed_sec"), height=180)
+                    if sample_frame["eda"].notna().any():
+                        eda_chart.line_chart(sample_frame[["elapsed_sec", "eda"]].dropna().set_index("elapsed_sec"), height=180)
+                    last_chart_render = elapsed
+
+            if elapsed - last_progress_render >= PROGRESS_RENDER_INTERVAL_SECONDS:
+                progress.progress(
+                    min(elapsed / duration_seconds, 1.0),
+                    text=f"{phase_label}: {max(0, int(duration_seconds - elapsed))}s remaining",
+                )
+                last_progress_render = elapsed
 
         end_time = iso_now()
-        append_sensor_rows(sensor_path(st.session_state.session_id), rows)
-        progress.progress(1.0, text=f"{phase.title()} recording complete")
-        return start_time, end_time, len(rows)
+        flush_pending_rows()
+        progress.progress(1.0, text=f"{phase_label} complete")
+        return start_time, end_time, sample_count
     finally:
-        reader.close()
+        try:
+            flush_pending_rows()
+        finally:
+            reader.close()
 
 
 def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None:
@@ -457,7 +490,7 @@ def render_navigation(total: int, clip: pd.Series, labels: pd.DataFrame) -> None
     stage = st.session_state.get("stage", "rest")
     prev_col, center_col, next_col = st.columns([1, 2, 1])
     with prev_col:
-        if full_width_button("← Previous", disabled=st.session_state.trial_position == 0):
+        if full_width_button("← Previous", disabled=stage != "rate" or st.session_state.trial_position == 0):
             move_trial(-1, stage="rate")
             st.rerun()
     with center_col:
@@ -500,7 +533,7 @@ def render_rating_flashcard(clip: pd.Series, labels: pd.DataFrame, saved: pd.Ser
         current = st.session_state.get(emotion_key, "")
         st.subheader("Emotion?")
         st.markdown("### Click one answer")
-        st.caption("1 = sad | 2 = neutral | 3 = happy")
+        st.caption("1 = negative | 2 = neutral | 3 = positive")
         if current:
             st.caption(f"Current saved answer: {current}")
         cols = st.columns(3)
@@ -612,46 +645,46 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
 
 
 def render_sensor_panel(clip_id: str, trial_index: int) -> None:
-    st.subheader("Sensor Recording")
-    st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV rows can be imported into the same file after the run.")
-    sensor_file = sensor_path(st.session_state.session_id)
-    st.code(str(sensor_file.relative_to(Path.cwd())), language="text")
+    with st.expander("Sensor Recording", expanded=False):
+        st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV rows can be imported into the same file after the run.")
+        sensor_file = sensor_path(st.session_state.session_id)
+        st.code(str(sensor_file.relative_to(Path.cwd())), language="text")
 
-    rows = load_sensor_rows(st.session_state.session_id)
-    rows = rows[
-        (rows["clip_id"].astype(str) == str(clip_id))
-        & (pd.to_numeric(rows["trial_index"], errors="coerce") == trial_index)
-    ].copy()
-    if rows.empty:
-        st.info("No sensor samples saved for this song yet.")
-        return
+        rows = load_sensor_rows(st.session_state.session_id)
+        rows = rows[
+            (rows["clip_id"].astype(str) == str(clip_id))
+            & (pd.to_numeric(rows["trial_index"], errors="coerce") == trial_index)
+        ].copy()
+        if rows.empty:
+            st.info("No sensor samples saved for this song yet.")
+            return
 
-    rows["sample_index"] = range(1, len(rows) + 1)
-    rest_count = int((rows["phase"] == "rest").sum())
-    listen_count = int((rows["phase"] == "listen").sum())
-    metric_cols = st.columns(4)
-    metric_cols[0].metric("Rest samples", rest_count)
-    metric_cols[1].metric("Listen samples", listen_count)
-    if rows["hr"].notna().any():
-        metric_cols[2].metric("Latest HR", f"{float(rows['hr'].dropna().iloc[-1]):.1f} bpm")
-    if rows["eda"].notna().any():
-        metric_cols[3].metric("Latest EDA", f"{float(rows['eda'].dropna().iloc[-1]):.3f}")
+        rows["sample_index"] = range(1, len(rows) + 1)
+        rest_count = int((rows["phase"] == "rest").sum())
+        listen_count = int((rows["phase"] == "listen").sum())
+        metric_cols = st.columns(4)
+        metric_cols[0].metric("Rest samples", rest_count)
+        metric_cols[1].metric("Listen samples", listen_count)
+        if rows["hr"].notna().any():
+            metric_cols[2].metric("Latest HR", f"{float(rows['hr'].dropna().iloc[-1]):.1f} bpm")
+        if rows["eda"].notna().any():
+            metric_cols[3].metric("Latest EDA", f"{float(rows['eda'].dropna().iloc[-1]):.3f}")
 
-    hr_rows = rows[["sample_index", "phase", "hr"]].dropna()
-    eda_rows = rows[["sample_index", "phase", "eda"]].dropna()
-    hr_col, eda_col = st.columns(2)
-    with hr_col:
-        st.caption("Heart rate")
-        if hr_rows.empty:
-            st.info("No HR values parsed.")
-        else:
-            st.line_chart(hr_rows.set_index("sample_index")[["hr"]], height=240)
-    with eda_col:
-        st.caption("EDA/GSR")
-        if eda_rows.empty:
-            st.info("No EDA values parsed.")
-        else:
-            st.line_chart(eda_rows.set_index("sample_index")[["eda"]], height=240)
+        hr_rows = rows[["sample_index", "phase", "hr"]].dropna()
+        eda_rows = rows[["sample_index", "phase", "eda"]].dropna()
+        hr_col, eda_col = st.columns(2)
+        with hr_col:
+            st.caption("Heart rate")
+            if hr_rows.empty:
+                st.info("No HR values parsed.")
+            else:
+                st.line_chart(hr_rows.set_index("sample_index")[["hr"]], height=240)
+        with eda_col:
+            st.caption("EDA/GSR")
+            if eda_rows.empty:
+                st.info("No EDA values parsed.")
+            else:
+                st.line_chart(eda_rows.set_index("sample_index")[["eda"]], height=240)
 
 
 def render_sensor_setup() -> tuple[str, str, int]:
@@ -755,26 +788,38 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Session")
-        default_session = datetime.now().strftime("self_%Y%m%d_%H%M%S")
-        user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
-        session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
-        sensor_source, serial_port, baud_rate = render_sensor_setup()
-        st.divider()
-        st.caption("Apple Watch: start a Workout before clicking Begin, then upload the HR CSV after the session.")
-        if full_width_button("Begin / restart session", disabled=not user_id.strip() or not session_id.strip()):
-            initialize_collection(
-                clips,
-                user_id=user_id.strip(),
-                session_id=session_id.strip(),
-                sensor_source=sensor_source,
-                serial_port=serial_port,
-                baud_rate=baud_rate,
-            )
-            st.rerun()
-
         if st.session_state.get("collection_started"):
+            st.caption("Session setup is locked during collection.")
+            st.caption(f"User: `{st.session_state.user_id}`")
+            st.caption(f"Session: `{st.session_state.session_id}`")
+            st.caption(f"Sensor: `{st.session_state.sensor_source}`")
+            if st.session_state.get("serial_port", ""):
+                st.caption(f"Port: `{st.session_state.serial_port}`")
             st.caption(f"Labels: `{label_path(st.session_state.session_id).relative_to(Path.cwd())}`")
             st.caption(f"Sensors: `{sensor_path(st.session_state.session_id).relative_to(Path.cwd())}`")
+            if st.session_state.get("stage") in {"rate", "complete"}:
+                st.divider()
+                if full_width_button("Start a new session"):
+                    st.session_state.clear()
+                    st.cache_data.clear()
+                    st.rerun()
+        else:
+            default_session = datetime.now().strftime("self_%Y%m%d_%H%M%S")
+            user_id = st.text_input("User ID", value=st.session_state.get("user_id", ""))
+            session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
+            sensor_source, serial_port, baud_rate = render_sensor_setup()
+            st.divider()
+            st.caption("Apple Watch: start a Workout before clicking Begin, then upload the HR CSV after the session.")
+            if full_width_button("Begin session", disabled=not user_id.strip() or not session_id.strip()):
+                initialize_collection(
+                    clips,
+                    user_id=user_id.strip(),
+                    session_id=session_id.strip(),
+                    sensor_source=sensor_source,
+                    serial_port=serial_port,
+                    baud_rate=baud_rate,
+                )
+                st.rerun()
 
     if not st.session_state.get("collection_started"):
         render_apple_watch_start_instructions()
@@ -795,11 +840,8 @@ def main() -> None:
     completed = session_rows["clip_id"].nunique() if not session_rows.empty else 0
     st.caption(f"Saved ratings: {completed} of {total}")
 
-    collection_col, sensor_col = st.columns([1.0, 1.0])
-    with collection_col:
-        render_collection_flow(clip, labels)
-    with sensor_col:
-        render_sensor_panel(str(clip["clip_id"]), trial_index)
+    render_collection_flow(clip, labels)
+    render_sensor_panel(str(clip["clip_id"]), trial_index)
 
 
 if __name__ == "__main__":

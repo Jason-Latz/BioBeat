@@ -35,12 +35,13 @@ def list_serial_ports() -> list[str]:
     except ImportError:
         return []
     devices = [port.device for port in list_ports.comports()]
-    preferred = [
+    usb_devices = [device for device in devices if device.startswith("/dev/cu.usb")]
+    non_bluetooth_devices = [
         device
         for device in devices
         if "bluetooth" not in device.lower() and "debug-console" not in device.lower()
     ]
-    visible_devices = preferred or devices
+    visible_devices = usb_devices or non_bluetooth_devices or devices
     return sorted(visible_devices, key=lambda device: (not device.startswith("/dev/cu.usb"), device))
 
 
@@ -168,6 +169,7 @@ class SerialSensorReader:
         *,
         source: str = "serial",
         single_value_metric: SingleValueMetric | None = None,
+        require_sensor_elapsed_ms: bool = False,
     ) -> None:
         try:
             import serial
@@ -176,6 +178,7 @@ class SerialSensorReader:
 
         self.source = source
         self.single_value_metric = single_value_metric
+        self.require_sensor_elapsed_ms = require_sensor_elapsed_ms
         self.serial = serial.Serial(port=port, baudrate=baud_rate, timeout=0.2)
         time.sleep(2)
         self.serial.reset_input_buffer()
@@ -192,7 +195,9 @@ class SerialSensorReader:
                 source=self.source,
                 single_value_metric=self.single_value_metric,
             )
-            if sample is not None:
+            if sample is not None and (
+                not self.require_sensor_elapsed_ms or sample.sensor_elapsed_ms is not None
+            ):
                 return sample
         return None
 
