@@ -108,4 +108,5 @@ self_20260531_220954,45,clip_231,yes,invalid_lead_artifact,excluded_disconnected
 self_20260531_220954,46,clip_180,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
 self_20260531_220954,47,clip_152,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
 self_20260531_220954,48,clip_227,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
-self_20260531_220954,49,,no,questionable_noise_or_transient,excluded_unrated_capture,no,No saved human rating exists for this sensor capture.
+self_20260531_220954,49,clip_202,yes,questionable_noise_or_transient,excluded_unverified_capture,no,Capture has not been verified for primary biometric training.
+self_20260531_220954,50,,no,questionable_noise_or_transient,excluded_unrated_capture,no,No saved human rating exists for this sensor capture.
