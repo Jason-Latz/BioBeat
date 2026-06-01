@@ -1,0 +1,4 @@
+user_id,session_id,clip_id,trial_index,rest_start_time,rest_end_time,clip_start_time,clip_end_time,preference,arousal,valence,mood,familiarity,notes
+preflight_20260531,self_20260531_151009,clip_128,1,2026-05-31T15:10:11.253,2026-05-31T15:10:31.266,2026-05-31T15:10:33.350,2026-05-31T15:11:03.357,,,2,neutral,1,
+preflight_20260531,self_20260531_151009,clip_110,2,2026-05-31T15:11:11.059,2026-05-31T15:11:31.059,2026-05-31T15:11:33.110,2026-05-31T15:12:03.129,,,2,neutral,1,
+preflight_20260531,self_20260531_151009,clip_062,3,2026-05-31T15:12:10.734,2026-05-31T15:12:30.741,2026-05-31T15:12:32.789,2026-05-31T15:13:02.789,,,1,negative,1,

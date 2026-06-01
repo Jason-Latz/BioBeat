@@ -1,0 +1,2 @@
+user_id,session_id,clip_id,trial_index,rest_start_time,rest_end_time,clip_start_time,clip_end_time,preference,arousal,valence,mood,familiarity,notes
+jason3,self_20260526_161225,clip_004,1,2026-05-26T16:12:35.683,2026-05-26T16:13:05.798,2026-05-26T16:13:10.269,2026-05-26T16:13:40.420,3,3,3,neutral,3,

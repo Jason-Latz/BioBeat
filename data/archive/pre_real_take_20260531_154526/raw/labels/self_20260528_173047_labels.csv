@@ -1,0 +1,2 @@
+user_id,session_id,clip_id,trial_index,rest_start_time,rest_end_time,clip_start_time,clip_end_time,preference,arousal,valence,mood,familiarity,notes
+t4sting,self_20260528_173047,clip_001,1,,,2026-05-28T17:32:46.731,2026-05-28T17:32:46.731,,,3,positive,5,

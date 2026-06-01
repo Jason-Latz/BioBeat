@@ -1,0 +1,2 @@
+user_id,session_id,clip_id,trial_index,rest_start_time,rest_end_time,clip_start_time,clip_end_time,preference,arousal,valence,mood,familiarity,notes
+asdf,self_20260531_151909,clip_120,1,2026-05-31T15:19:11.486,2026-05-31T15:19:31.489,2026-05-31T15:19:33.543,2026-05-31T15:20:03.556,,,2,neutral,1,
