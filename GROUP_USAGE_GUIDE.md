@@ -5,7 +5,7 @@ This is the practical guide for using BioBeat right now.
 There are basically two jobs:
 
 1. Jason runs the music/rating/training pipeline.
-2. The sensor team gets Seeed GSR/EDA values streaming from the Raspberry Pi over serial while Jason imports Apple Watch HR from CSV after the run.
+2. The sensor team gets Seeed GSR/EDA values streaming from the Raspberry Pi over serial while Jason imports Apple Watch HR from CSV or Apple Health XML after the run.
 
 Everything else is just files and commands.
 
@@ -114,7 +114,7 @@ Then:
    - click `Start song + record sensors`
    - the app starts the song preview and records 30 seconds of song GSR response
    - rate the song, then click `Next` to save and move on
-8. Stop the Apple Watch Workout after the last song, export heart-rate data as CSV, and upload it on the completion screen.
+8. Stop the Apple Watch Workout after the last song, export heart-rate data as CSV or Apple Health XML, and upload it on the completion screen.
 
 The app saves as you go.
 
@@ -139,15 +139,15 @@ You rate each song after hearing it.
 - `1` = disliked it
 - `5` = liked it a lot
 
-`arousal`: how activated or energized you felt.
+`arousal`: derived by BioBeat from the sensor response.
 
-- `1` = calm/sleepy
-- `5` = energized/hyped
+BioBeat estimates arousal on a `0.0` to `1.0` scale from EDA/GSR plus Apple Watch HR/PPG-derived change from the rest baseline. EDA has the strongest weight because it is closely tied to sympathetic nervous system activation; heart-rate response is useful supporting evidence but is noisier.
 
-`valence`: how positive or negative the feeling was.
+`valence`: how negative, neutral, or positive the feeling was.
 
-- `1` = negative/unpleasant/sad
-- `5` = positive/pleasant/happy
+- `negative` = sad, angry, tense, uneasy, or otherwise negative; it does not mean you disliked the song
+- `neutral` = emotionally mixed or not clearly positive/negative
+- `positive` = pleasant, happy, peaceful, excited, or otherwise positive
 
 Valence is not the same as arousal. A song can be:
 
@@ -156,9 +156,9 @@ Valence is not the same as arousal. A song can be:
 - high arousal, positive valence: exciting
 - high arousal, negative valence: tense or stressful
 
-For the project, arousal is the main target because HR and EDA are most directly related to activation. Valence is secondary and harder to predict, but it helps separate “calm and pleasant” from “calm and sad.”
+For the project, arousal is the main biometric-derived target because HR and EDA are most directly related to activation. Valence is self-reported because it is much harder to infer from biometric markers alone. The training pipeline uses audio features as the main predictor for reported valence, with an optional audio+biomarker experiment for analysis.
 
-`mood` is different from valence. Mood is just an optional human-readable tag, like `sad`, `relaxed`, or `excited`. Valence is the numeric training label. If you are unsure, trust the valence slider and pick the closest mood tag.
+`mood` is different from valence. Mood is just an optional human-readable tag, like `sad`, `relaxed`, or `excited`. BioBeat maps predicted valence plus predicted arousal to mood for recommendations.
 
 ## Do You Need To Rate The Songs Yourself?
 
@@ -212,7 +212,7 @@ data/raw/sensor/{session_id}_sensor.csv
 
 ## Apple Watch HR Import
 
-Apple Watch heart rate is not treated as a live serial sensor. After a collection session, export heart-rate samples from Apple Health or a Health export app as CSV, then upload the CSV on the dashboard completion screen. The app previews how many HR samples matched each rest/listen window before importing.
+Apple Watch heart rate is not treated as a live serial sensor. After a collection session, export heart-rate samples from Apple Health as XML or from a Health export app as CSV, then upload the file on the dashboard completion screen. The app previews how many HR samples matched each rest/listen window before importing.
 
 You can also import from the command line:
 
@@ -226,7 +226,7 @@ The importer finds a timestamp column and an HR/BPM/value column, matches sample
 data/raw/sensor/{session_id}_sensor.csv
 ```
 
-If the Health CSV clock is offset from the dashboard clock, add `--time-offset-seconds`.
+If the Health file clock is offset from the dashboard clock, add `--time-offset-seconds`.
 
 ## Train The Model
 
@@ -251,7 +251,8 @@ models/metrics/
 To generate recommendation rankings:
 
 ```bash
-python src/models/recommend.py --target-mode all --user-id jason --session-id jason_s01
+python src/models/calibrate_user.py --user-id jason --session-id jason_s01 --max-clips 5
+python src/models/recommend.py --target-mood all --user-id jason
 ```
 
 Replace `jason` and `jason_s01` with the IDs you used in the dashboard.
@@ -297,8 +298,9 @@ The clean story is:
 2. It records rest/song GSR and imports Apple Watch HR.
 3. It asks for self-report ratings.
 4. It extracts audio and biometric features.
-5. It trains simple models, especially for arousal.
-6. It uses those predictions to rank calm or hype recommendations.
+5. It derives biometric arousal and trains audio-based arousal/valence models.
+6. It optionally calibrates the generic model from a short 5-song user pass.
+7. It maps predicted valence/arousal to moods and ranks recommendations.
 
 The honest claim:
 

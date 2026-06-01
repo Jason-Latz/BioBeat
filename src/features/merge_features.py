@@ -19,6 +19,7 @@ from biobeat_paths import (  # noqa: E402
     ensure_project_dirs,
     repo_path,
 )
+from features.target_features import add_model_targets  # noqa: E402
 
 
 LABEL_COLUMNS = [
@@ -70,14 +71,6 @@ def read_labels(labels_dir: Path) -> pd.DataFrame:
     return labels
 
 
-def add_binary_labels(table: pd.DataFrame) -> pd.DataFrame:
-    table = table.copy()
-    for column in ("preference", "arousal", "valence"):
-        table[column] = pd.to_numeric(table[column], errors="coerce")
-        table[f"{column}_binary"] = (table[column] >= 4).astype(int)
-    return table
-
-
 def merge_features(
     clips_path: Path,
     labels_dir: Path,
@@ -123,7 +116,7 @@ def merge_features(
         .merge(audio, on="clip_id", how="left")
         .merge(biometrics, on=["user_id", "session_id", "clip_id"], how="left")
     )
-    table = add_binary_labels(table)
+    table = add_model_targets(table)
 
     first_columns = [
         "user_id",

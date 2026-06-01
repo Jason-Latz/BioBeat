@@ -22,14 +22,21 @@ BASE_FEATURE_COLUMNS = [
     "tempo",
     "rms_energy_mean",
     "rms_energy_std",
+    "rms_energy_range",
+    "rms_energy_slope",
     "zero_crossing_rate_mean",
     "zero_crossing_rate_std",
     "spectral_centroid_mean",
     "spectral_centroid_std",
+    "spectral_centroid_slope",
     "spectral_bandwidth_mean",
     "spectral_bandwidth_std",
     "spectral_rolloff_mean",
     "spectral_rolloff_std",
+    "spectral_contrast_mean",
+    "spectral_contrast_std",
+    "onset_strength_mean",
+    "onset_strength_std",
 ]
 FEATURE_COLUMNS = (
     BASE_FEATURE_COLUMNS
@@ -52,6 +59,14 @@ def download_preview_to_temp(preview_url: str) -> tempfile.NamedTemporaryFile:
     temp_file.write(response.content)
     temp_file.flush()
     return temp_file
+
+
+def feature_slope(values: np.ndarray) -> float:
+    flat = np.ravel(values).astype(float)
+    if flat.size < 2:
+        return 0.0
+    x = np.arange(flat.size, dtype=float)
+    return float(np.polyfit(x, flat, 1)[0])
 
 
 def extract_features_from_preview(preview_url: str) -> dict[str, float]:
@@ -80,6 +95,8 @@ def extract_features_from_preview(preview_url: str) -> dict[str, float]:
     centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
     bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)
     rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
+    contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+    onset_strength = librosa.onset.onset_strength(y=y, sr=sr)
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
 
@@ -88,14 +105,21 @@ def extract_features_from_preview(preview_url: str) -> dict[str, float]:
         "tempo": float(np.ravel(tempo)[0]),
         "rms_energy_mean": float(np.mean(rms)),
         "rms_energy_std": float(np.std(rms)),
+        "rms_energy_range": float(np.max(rms) - np.min(rms)),
+        "rms_energy_slope": feature_slope(rms),
         "zero_crossing_rate_mean": float(np.mean(zcr)),
         "zero_crossing_rate_std": float(np.std(zcr)),
         "spectral_centroid_mean": float(np.mean(centroid)),
         "spectral_centroid_std": float(np.std(centroid)),
+        "spectral_centroid_slope": feature_slope(centroid),
         "spectral_bandwidth_mean": float(np.mean(bandwidth)),
         "spectral_bandwidth_std": float(np.std(bandwidth)),
         "spectral_rolloff_mean": float(np.mean(rolloff)),
         "spectral_rolloff_std": float(np.std(rolloff)),
+        "spectral_contrast_mean": float(np.mean(contrast)),
+        "spectral_contrast_std": float(np.std(contrast)),
+        "onset_strength_mean": float(np.mean(onset_strength)),
+        "onset_strength_std": float(np.std(onset_strength)),
     }
 
     for index, value in enumerate(np.mean(chroma, axis=1), start=1):

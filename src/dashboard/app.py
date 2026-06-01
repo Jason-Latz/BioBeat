@@ -68,6 +68,7 @@ MOOD_OPTIONS = [
     "neutral",
     "other",
 ]
+VALENCE_OPTIONS = ["negative", "neutral", "positive"]
 
 
 def iso_now() -> str:
@@ -198,6 +199,21 @@ def saved_int(saved: pd.Series | None, field: str, default: int) -> int:
         return default
 
 
+def saved_valence(saved: pd.Series | None) -> str:
+    value = str(saved_field(saved, "valence", "neutral")).strip().lower()
+    if value in VALENCE_OPTIONS:
+        return value
+    try:
+        numeric = float(value)
+    except ValueError:
+        return "neutral"
+    if numeric <= 2:
+        return "negative"
+    if numeric >= 4:
+        return "positive"
+    return "neutral"
+
+
 def session_label_rows(labels: pd.DataFrame, user_id: str, session_id: str) -> pd.DataFrame:
     if labels.empty:
         return pd.DataFrame(columns=LABEL_COLUMNS)
@@ -278,8 +294,8 @@ def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
         "clip_start_time": st.session_state.clip_start_time or saved_field(saved, "clip_start_time", iso_now()),
         "clip_end_time": st.session_state.clip_end_time or saved_field(saved, "clip_end_time", iso_now()),
         "preference": int(st.session_state.get(rating_key(clip_id, "preference"), saved_int(saved, "preference", 3))),
-        "arousal": int(st.session_state.get(rating_key(clip_id, "arousal"), saved_int(saved, "arousal", 3))),
-        "valence": int(st.session_state.get(rating_key(clip_id, "valence"), saved_int(saved, "valence", 3))),
+        "arousal": saved_field(saved, "arousal", ""),
+        "valence": str(st.session_state.get(rating_key(clip_id, "valence"), saved_valence(saved))),
         "mood": other_mood if mood == "other" and other_mood else mood,
         "familiarity": int(st.session_state.get(rating_key(clip_id, "familiarity"), saved_int(saved, "familiarity", 3))),
         "notes": str(st.session_state.get(rating_key(clip_id, "notes"), saved_field(saved, "notes", ""))).strip(),
@@ -456,7 +472,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
     if stage == "rate":
         default_mood = str(saved["mood"]) if saved is not None and str(saved["mood"]) in MOOD_OPTIONS else "neutral"
         st.subheader("Rate this song")
-        st.caption("Adjust the sliders, then click Next. The numeric sliders are the training labels.")
+        st.caption("Report valence after listening, then click Next. Arousal is derived from the sensor response.")
         st.slider(
             "Preference",
             1,
@@ -465,27 +481,19 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
             help="1 = disliked it, 5 = liked it a lot",
             key=rating_key(clip_id, "preference"),
         )
-        st.slider(
-            "Arousal",
-            1,
-            5,
-            saved_int(saved, "arousal", 3),
-            help="1 = calm/sleepy, 5 = energized/hyped",
-            key=rating_key(clip_id, "arousal"),
-        )
-        st.slider(
-            "Valence",
-            1,
-            5,
-            saved_int(saved, "valence", 3),
-            help="1 = negative/unpleasant/sad, 5 = positive/pleasant/happy",
+        st.radio(
+            "Reported valence",
+            VALENCE_OPTIONS,
+            index=VALENCE_OPTIONS.index(saved_valence(saved)),
+            horizontal=True,
+            help="Negative does not mean dislike; it can mean sad, angry, tense, uneasy, or otherwise negative.",
             key=rating_key(clip_id, "valence"),
         )
         mood = st.selectbox(
             "Mood tag (optional)",
             MOOD_OPTIONS,
             index=MOOD_OPTIONS.index(default_mood),
-            help="A human-readable tag for notes/demo. The model primarily uses the numeric ratings.",
+            help="A human-readable tag for notes/demo. Recommendations map predicted valence and arousal to moods.",
             key=rating_key(clip_id, "mood"),
         )
         if mood == "other":
@@ -518,7 +526,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
 
 def render_sensor_panel(clip_id: str, trial_index: int) -> None:
     st.subheader("Sensor Recording")
-    st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV rows can be imported into the same file after the run.")
+    st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV/XML rows can be imported into the same file after the run.")
     sensor_file = sensor_path(st.session_state.session_id)
     st.code(str(sensor_file.relative_to(Path.cwd())), language="text")
 
@@ -572,7 +580,7 @@ def render_sensor_setup() -> tuple[str, str, int]:
             st.warning("No serial ports found. Connect the Raspberry Pi serial output, then reload.")
             serial_port = st.text_input("Manual serial port", value="/dev/cu.usbserial")
         baud_rate = int(st.number_input("Baud rate", min_value=1200, max_value=2000000, value=115200, step=9600))
-        st.caption("Accepted Seeed GSR formats: `GSR:1.42`, `EDA:1.42`, `1.42`, or JSON like `{\"gsr\":1.42}`. Apple Watch HR is imported from CSV later.")
+        st.caption("Accepted Seeed GSR formats: `GSR:1.42`, `EDA:1.42`, `1.42`, or JSON like `{\"gsr\":1.42}`. Apple Watch HR is imported from CSV or XML later.")
     else:
         st.caption("Mock sensor generates plausible HR and EDA values so the training flow can be tested without hardware.")
 
@@ -582,14 +590,14 @@ def render_sensor_setup() -> tuple[str, str, int]:
 def render_apple_watch_start_instructions() -> None:
     st.info(
         "Before you begin: start an Apple Watch Workout and keep it running for the full BioBeat session. "
-        "After the last song, export heart-rate data as a CSV and upload it on the completion screen."
+        "After the last song, export heart-rate data as a CSV or Apple Health XML and upload it on the completion screen."
     )
 
 
 def render_apple_watch_import(labels: pd.DataFrame) -> None:
     st.subheader("Apple Watch Heart Rate Upload")
     st.caption(
-        "Upload the heart-rate CSV after finishing the session. BioBeat syncs it by matching Apple Watch timestamps "
+        "Upload the heart-rate CSV or Apple Health XML after finishing the session. BioBeat syncs it by matching Apple Watch timestamps "
         "to each recorded rest and song window."
     )
 
@@ -598,21 +606,26 @@ def render_apple_watch_import(labels: pd.DataFrame) -> None:
         st.warning("No saved ratings/windows were found for this session yet.")
         return
 
-    uploaded = st.file_uploader("Upload Apple Watch / Apple Health heart-rate CSV", type=["csv"])
+    uploaded = st.file_uploader("Upload Apple Watch / Apple Health heart-rate file", type=["csv", "xml"])
     offset = st.number_input(
         "Time offset seconds",
         value=0.0,
         step=1.0,
-        help="Use this only if the CSV timestamps look shifted from the dashboard timestamps.",
+        help="Use this only if the Apple Watch timestamps look shifted from the dashboard timestamps.",
     )
     replace_prior = st.checkbox("Replace previous Apple Watch import for this session", value=True)
 
     if uploaded is None:
-        st.info("Upload the exported HR CSV here when the session is done.")
+        st.info("Upload the exported HR file here when the session is done.")
         return
 
     try:
-        health = pd.read_csv(uploaded)
+        if str(uploaded.name).lower().endswith(".xml"):
+            from sensors.import_apple_watch_hr import read_apple_health_xml
+
+            health = read_apple_health_xml(uploaded)
+        else:
+            health = pd.read_csv(uploaded)
         rows = build_hr_rows_from_frames(
             health=health,
             labels=session_labels,
@@ -665,7 +678,7 @@ def main() -> None:
         session_id = st.text_input("Session ID", value=st.session_state.get("session_id", default_session))
         sensor_source, serial_port, baud_rate = render_sensor_setup()
         st.divider()
-        st.caption("Apple Watch: start a Workout before clicking Begin, then upload the HR CSV after the session.")
+        st.caption("Apple Watch: start a Workout before clicking Begin, then upload the HR CSV/XML after the session.")
         if full_width_button("Begin / restart session", disabled=not user_id.strip() or not session_id.strip()):
             initialize_collection(
                 clips,

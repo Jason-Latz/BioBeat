@@ -32,3 +32,7 @@ Do not leave that learning only in chat history.
 - BioBeat dashboard should instruct users to start an Apple Watch Workout before collection and provide a clear end-of-session Apple Watch HR CSV upload/import step with per-song sync coverage.
 - BioBeat serial setup should prioritize real USB serial devices such as `/dev/cu.usbmodem*` and avoid defaulting to Mac Bluetooth/debug console ports.
 - Seeed GSR serial lines may send `milliseconds_since_start,eda`; store the first value as `sensor_elapsed_ms` and never display or treat it as heart rate.
+- BioBeat's next modeling direction should derive arousal from EDA plus Apple Watch PPG/heart-rate response, collect valence as negative/neutral/positive self-report, train both valence classification and discrete regression experiments, and support a short 5-song new-user calibration pass.
+- BioBeat calibration should use the short new-user sensor pass to estimate baseline biometric behavior, adjust normalization, and optionally calibrate valence probabilities rather than fully retraining complex models from only 5 samples.
+- Do not build continuous real-time mood guessing for BioBeat yet; focus on initial calibration of the generic model for each user.
+- Current BioBeat collected training data is outdated and not recorded well; remove stale label/sensor/derived training artifacts when resetting the dataset, but keep the folder structure for future collection.

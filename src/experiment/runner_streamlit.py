@@ -40,6 +40,7 @@ MOOD_OPTIONS = [
     "neutral",
     "other",
 ]
+VALENCE_OPTIONS = ["negative", "neutral", "positive"]
 
 
 def iso_now() -> str:
@@ -155,8 +156,13 @@ def main() -> None:
 
     with st.form("ratings_form", clear_on_submit=True):
         preference = st.slider("Preference", 1, 5, 3, help="1 = dislike, 5 = like")
-        arousal = st.slider("Arousal", 1, 5, 3, help="1 = calm, 5 = energized")
-        valence = st.slider("Valence", 1, 5, 3, help="1 = negative, 5 = positive")
+        valence = st.radio(
+            "Reported valence",
+            VALENCE_OPTIONS,
+            index=1,
+            horizontal=True,
+            help="Negative does not mean dislike; it can mean sad, angry, tense, or uneasy.",
+        )
         mood = st.selectbox("Mood", MOOD_OPTIONS)
         other_mood = ""
         if mood == "other":
@@ -175,7 +181,7 @@ def main() -> None:
             "clip_start_time": clip_start,
             "clip_end_time": iso_now(),
             "preference": preference,
-            "arousal": arousal,
+            "arousal": "",
             "valence": valence,
             "mood": other_mood.strip() if mood == "other" and other_mood.strip() else mood,
             "familiarity": familiarity,
