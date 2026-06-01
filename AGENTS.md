@@ -58,13 +58,15 @@ Do not leave that learning only in chat history.
 - Before a long real BioBeat collection take, run a short hardware-fit dry run and audit EDA adjacent-sample changes. A disconnected GSR lead can produce a highly repetitive oscillation rather than a flat line, so visible variance alone does not prove that the signal is valid.
 - Treat BioBeat ratings and biometric validity separately. Preserve completed ratings when hardware quality fails, but exclude questionable GSR/EDA blocks from primary biometric training until they are recollected or explicitly modeled as noisy secondary data.
 - Use `negative`, `neutral`, and `positive` for BioBeat human emotion labels. Treat legacy `sad` and `happy` values as backwards-compatible aliases only.
+- Read `BIOBEAT_HANDOFF.md` before changing the collector, interpreting real data, or starting another collection session. Update it whenever collection state, data inventory, quality decisions, or next-step instructions change.
+- Before finalizing BioBeat documentation, exports, or recovery queues, check raw CSV modification times and `git status`. An open Streamlit continuation session can append a later rating or capture after an earlier checkpoint.
+- Name BioBeat recovery queues by verified state. Use `unrated`, not `untouched`, when a queue can include a song that was played during an unrated sensor capture.
+- Quote shell search patterns containing Markdown backticks with single quotes. Unquoted backticks trigger shell command substitution and invalidate the check.
 
 ## Active Issues Before Next Attempt
 
-- The in-app browser was redirected from the intended collector on port `8503` to a temporary validation instance on port `8504`. Restore one known collector URL before further testing.
-- Confirm manually that the fixed below-the-fold sensor monitor stays out of view during normal collection while raw GSR rows continue saving.
-- The `test89` Raspberry Pi dry run after the startup-line parser guard passed: both rest and listen phases saved at about 49 Hz with no missing `sensor_elapsed_ms`, malformed EDA values, timing reversals, or startup outliers.
-- Jason manually confirmed that the `test89` collector flow passed visually: the below-the-fold EDA monitor placement, uninterrupted rest/song timers, and audio playback all behaved correctly.
-- Before Jason starts a real BioBeat collection take, archive prior `self_*` label and sensor CSVs into a timestamped `data/archive/` folder instead of deleting them. Leave tracked demo fixtures and placeholders in the active raw folders.
-- Keep BioBeat session setup locked during timed capture, but provide `Start a new session` after capture reaches ratings or completion so Jason can transition from a dry run to the real take without restarting Streamlit.
-- Do not tell Jason the collector is ready again until his non-disruptive dry run proves timer continuity, audio continuity, incremental raw sensor persistence, and below-the-fold monitor placement together.
+- The intended collector URL is `http://127.0.0.1:8503/`. A historical continuation launcher may still be running there with `data/collection_batches/continuation_deep_cuts_90.csv`; do not resume that page blindly.
+- Before another long take, run a fresh one-song hardware-fit dry run in a new session and audit the saved EDA numerically. Trial `50` of `self_20260531_220954` was a later hardware-check attempt, but it remains unverified.
+- The current next clean batch is `data/collection_batches/continuation_unrated_41.csv`. It contains `40` never-played songs plus `clip_209`, which was captured during unrated trial `50`.
+- The later recollection batch is `data/collection_batches/continuation_recollect_49.csv`.
+- Apple Watch HR has not yet been imported into either real session.
