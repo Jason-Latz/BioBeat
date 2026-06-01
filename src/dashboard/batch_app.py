@@ -11,7 +11,12 @@ def main() -> None:
     if not clips_path:
         raise RuntimeError("Set BIOBEAT_CLIPS_CSV to the collection batch CSV.")
 
+    clip_order = os.environ.get("BIOBEAT_CLIP_ORDER", "shuffle").strip().lower()
+    if clip_order not in {"shuffle", "csv"}:
+        raise RuntimeError("Set BIOBEAT_CLIP_ORDER to either 'shuffle' or 'csv'.")
+
     dashboard_app.CLIPS_CSV = repo_path(clips_path)
+    dashboard_app.SHUFFLE_CLIPS = clip_order != "csv"
     dashboard_app.main()
 
 

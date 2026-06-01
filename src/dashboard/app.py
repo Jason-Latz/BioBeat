@@ -31,6 +31,7 @@ LISTEN_SECONDS = 30
 SENSOR_FLUSH_INTERVAL_SECONDS = 1.0
 PROGRESS_RENDER_INTERVAL_SECONDS = 0.1
 APPLE_WATCH_SOURCE = "apple_watch_csv"
+SHUFFLE_CLIPS = True
 EMOTION_LABELS = {
     1: "negative",
     2: "neutral",
@@ -226,7 +227,8 @@ def initialize_collection(
     baud_rate: int,
 ) -> None:
     order = clips["clip_id"].astype(str).tolist()
-    random.Random(session_id).shuffle(order)
+    if SHUFFLE_CLIPS:
+        random.Random(session_id).shuffle(order)
     st.session_state.collection_started = True
     st.session_state.user_id = user_id
     st.session_state.session_id = session_id
