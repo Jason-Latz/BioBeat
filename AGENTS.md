@@ -64,10 +64,13 @@ Do not leave that learning only in chat history.
 - Quote shell search patterns containing Markdown backticks with single quotes. Unquoted backticks trigger shell command substitution and invalidate the check.
 - For Jason's next BioBeat clean rerecord, preserve every historical raw file and use new session IDs. Collect the full catalog in explicit descending clip order so deeper-cut and previously uncollected songs are recorded first.
 - Do not run Jason's full clean rerecord as one uninterrupted 240-song session. Use bounded reverse-order blocks with a hardware-fit dry run before block 1 and numerical EDA QC between blocks.
+- For ordered BioBeat batch collection, launch `src/dashboard/batch_app.py` with `BIOBEAT_CLIP_ORDER=csv`. Leave the default shuffle mode intact for unrelated runs.
 
 ## Active Issues Before Next Attempt
 
-- The intended collector URL is `http://127.0.0.1:8503/`. A historical continuation launcher may still be running there with `data/collection_batches/continuation_deep_cuts_90.csv`; do not resume that page blindly.
-- Before another long take, run a fresh one-song hardware-fit dry run in a new session and audit the saved EDA numerically. Trial `50` of `self_20260531_220954` was a later hardware-check attempt, but it remains unverified.
-- Jason requested a clean rerecord of the full catalog in descending clip order so deeper-cut and previously uncollected songs are captured first. The reverse-order batch files and ordered-run mode still need to be created before collection starts.
+- The intended collector URL is `http://127.0.0.1:8503/`.
+- The historical continuation launcher was stopped before clean-reverse preparation. Relaunch `8503` with `BIOBEAT_CLIP_ORDER=csv` and the intended clean-reverse batch only.
+- Before block `01`, run `data/collection_batches/clean_reverse_hardware_check_1.csv` in a fresh `hardware_check_reverse_20260601_1` session and audit the saved EDA numerically.
+- The six clean reverse queues are `data/collection_batches/clean_reverse_b01_240_201.csv` through `data/collection_batches/clean_reverse_b06_040_001.csv`.
+- The pre-rerecord snapshot is `data/archive/pre_clean_reverse_20260601_002708/`.
 - Apple Watch HR has not yet been imported into either real session.

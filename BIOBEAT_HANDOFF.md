@@ -54,7 +54,7 @@ models/*.joblib
 
 ### Collector Server
 
-At the time this handoff was written, the intended collector server was still listening on:
+The historical continuation launcher was stopped during clean-reverse preparation. The intended collector URL remains:
 
 ```text
 http://127.0.0.1:8503/
@@ -66,14 +66,15 @@ The process was:
 .venv/bin/streamlit run src/dashboard/batch_app.py --server.port 8503 --server.address 127.0.0.1
 ```
 
-with:
+For the pre-block hardware check, launch it with:
 
 ```text
-BIOBEAT_CLIPS_CSV=data/collection_batches/continuation_deep_cuts_90.csv
+BIOBEAT_CLIPS_CSV=data/collection_batches/clean_reverse_hardware_check_1.csv
+BIOBEAT_CLIP_ORDER=csv
 PYTHONPATH=src
 ```
 
-This server remains useful as a historical continuation launcher, but **do not resume the existing session page after fixing the hardware**. Start a fresh session and run a one-song hardware dry run first.
+This produces a one-song ordered hardware-check session only. Do not resume the historical continuation page.
 
 Use port `8503` consistently. Temporary ports such as `8504` were used during earlier validation and caused confusion. Do not direct Jason back to them.
 
@@ -688,6 +689,7 @@ Archives are intentionally non-destructive:
 data/archive/pre_real_take_20260531_154526/
 data/archive/official_run_1_checkpoint_20260531_170217/
 data/archive/continuation_hardware_issue_checkpoint_20260531_231446/
+data/archive/pre_clean_reverse_20260601_002708/
 ```
 
 Do not delete these without explicit approval.
@@ -832,18 +834,24 @@ This intentionally prioritizes the newer deeper-cut material before the older br
 
 Do not overwrite or delete any existing raw CSV. Every new run must use a fresh session ID so it writes separate files.
 
-The dashboard currently shuffles clips deterministically from the session ID. Before starting the clean rerecord, add an explicit ordered-run mode and generate descending batch CSVs. Keep shuffle behavior as the default for unrelated runs.
+The dashboard normally shuffles clips deterministically from the session ID. The batch launcher now supports an opt-in ordered mode:
 
-Do not record all `240` clips as one uninterrupted session. A single full run would take several hours and would make another unnoticed hardware failure expensive. Generate six descending `40`-clip blocks:
+```text
+BIOBEAT_CLIP_ORDER=csv
+```
 
-| Block | Descending clip range |
-| --- | --- |
-| `01` | `clip_240` through `clip_201` |
-| `02` | `clip_200` through `clip_161` |
-| `03` | `clip_160` through `clip_121` |
-| `04` | `clip_120` through `clip_081` |
-| `05` | `clip_080` through `clip_041` |
-| `06` | `clip_040` through `clip_001` |
+Use that setting for every clean reverse launch. Shuffle behavior remains the default for unrelated runs.
+
+Do not record all `240` clips as one uninterrupted session. A single full run would take several hours and would make another unnoticed hardware failure expensive. The generated descending `40`-clip blocks are:
+
+| Block | Descending clip range | Batch CSV |
+| --- | --- | --- |
+| `01` | `clip_240` through `clip_201` | `data/collection_batches/clean_reverse_b01_240_201.csv` |
+| `02` | `clip_200` through `clip_161` | `data/collection_batches/clean_reverse_b02_200_161.csv` |
+| `03` | `clip_160` through `clip_121` | `data/collection_batches/clean_reverse_b03_160_121.csv` |
+| `04` | `clip_120` through `clip_081` | `data/collection_batches/clean_reverse_b04_120_081.csv` |
+| `05` | `clip_080` through `clip_041` | `data/collection_batches/clean_reverse_b05_080_041.csv` |
+| `06` | `clip_040` through `clip_001` | `data/collection_batches/clean_reverse_b06_040_001.csv` |
 
 Run numerical EDA QC after the one-song hardware check and again between every block.
 
@@ -855,11 +863,30 @@ Jason should finish repairing and fitting the GSR/EDA hardware before any long c
 
 Do **not** resume the old continuation session.
 
+The isolated one-song queue is:
+
+```text
+data/collection_batches/clean_reverse_hardware_check_1.csv
+```
+
+It uses `clip_001` so the dry run does not expose a priority deep cut.
+
+Launch the dry-run server:
+
+```bash
+BIOBEAT_CLIPS_CSV=data/collection_batches/clean_reverse_hardware_check_1.csv \
+BIOBEAT_CLIP_ORDER=csv \
+PYTHONPATH=src \
+.venv/bin/streamlit run src/dashboard/batch_app.py \
+  --server.port 8503 \
+  --server.address 127.0.0.1
+```
+
 Use a fresh session:
 
 ```text
 user_id=hardware_check
-session_id=hardware_check_1
+session_id=hardware_check_reverse_20260601_1
 ```
 
 Record exactly one complete song, then stop on the rating screen without rating it.
@@ -869,16 +896,27 @@ Do not click into the next song.
 Run the QC script against the new sensor CSV:
 
 ```bash
-PYTHONPATH=src .venv/bin/python src/sensors/audit_eda_quality.py data/raw/sensor/hardware_check_1_sensor.csv
+PYTHONPATH=src .venv/bin/python src/sensors/audit_eda_quality.py data/raw/sensor/hardware_check_reverse_20260601_1_sensor.csv
 ```
 
 The result should be inspected before Jason invests more time. A moving chart is not sufficient evidence.
 
-### Step 3: Prepare Ordered Reverse Batches
+### Step 3: Launch The First Ordered Reverse Block
 
-After the one-song dry run passes, stop the existing server deliberately. Add ordered-run support and generate the six descending batch CSVs before launching block `01`.
+After the one-song dry run passes, stop the dry-run server deliberately and launch block `01`.
 
-The launch command should preserve CSV order explicitly. Do not reuse the historical continuation launcher or rely on the session ID shuffle.
+The block `01` launch command is:
+
+```bash
+BIOBEAT_CLIPS_CSV=data/collection_batches/clean_reverse_b01_240_201.csv \
+BIOBEAT_CLIP_ORDER=csv \
+PYTHONPATH=src \
+.venv/bin/streamlit run src/dashboard/batch_app.py \
+  --server.port 8503 \
+  --server.address 127.0.0.1
+```
+
+Every later block launch must also set `BIOBEAT_CLIP_ORDER=csv`. Do not reuse the historical continuation launcher or rely on the session ID shuffle.
 
 ### Step 4: Collect Reverse Blocks
 
@@ -1012,6 +1050,8 @@ f75ef48 feat: add EDA quality audit and curated rating export
 d31d5fe data: add raw sensor captures and checkpoints
 9d74aef docs: record collection safeguards and rating terms
 745fbb6 data: sync continuation hardware-check delta
+f1d9782 feat: support ordered batch collection
+dc614c7 data: add clean reverse rerecord queues and baseline archive
 ```
 
 ## 13. Final Interpretation
