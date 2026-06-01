@@ -1,0 +1,2 @@
+clip_id,track_name,artist,album,genre,preview_url,track_id,intended_arousal,intended_valence,intended_mood,song_query,artist_query,selection_method,match_score
+clip_001,Good Days,SZA,SOS,R&B/Soul,https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/32/fe/9b32fec3-fbfb-db0f-3dcf-bb089d412f23/mzaf_15200324731067771849.plus.aac.p.m4a,1658650802,medium,positive,relaxed,Good Days,SZA,best_score,100.0

@@ -1,0 +1,112 @@
+session_id,trial_index,clip_id,has_rating,serial_pattern_quality,collection_quality,use_eda_for_primary_biometric_training,exclusion_reason
+self_20260531_155844,1,clip_126,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,2,clip_106,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,3,clip_086,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,4,clip_054,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,5,clip_069,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,6,clip_037,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,7,clip_012,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,8,clip_015,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,9,clip_043,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,10,clip_064,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,11,clip_044,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,12,clip_028,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,13,clip_130,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,14,clip_004,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,15,clip_087,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,16,clip_016,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,17,clip_067,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,18,clip_041,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,19,clip_026,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,20,clip_047,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,21,clip_148,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,22,clip_092,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,23,clip_056,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,24,clip_009,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,25,clip_103,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,26,clip_045,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,27,clip_021,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,28,clip_003,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,29,clip_107,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,30,clip_048,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,31,clip_088,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,32,clip_011,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,33,clip_094,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,34,clip_108,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,35,clip_042,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,36,clip_035,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,37,clip_074,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,38,clip_147,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,39,clip_110,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,40,clip_023,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,41,clip_072,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,42,clip_146,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,43,clip_132,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,44,clip_090,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,45,clip_001,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,46,clip_149,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,47,clip_038,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,48,clip_121,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,49,clip_093,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,50,clip_097,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,51,clip_140,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,52,clip_118,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,53,clip_039,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,54,clip_137,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,55,clip_084,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,56,clip_125,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,57,clip_113,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,58,clip_077,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,59,clip_134,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,60,clip_024,yes,plausible,excluded_wrong_sensor_fit,no,"Sensor readings are structurally plausible, but the sensor was worn incorrectly."
+self_20260531_155844,61,,no,plausible,excluded_unrated_capture,no,No saved human rating exists for this sensor capture.
+self_20260531_220954,1,clip_198,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,2,clip_205,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,3,clip_172,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,4,clip_173,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,5,clip_200,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,6,clip_168,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,7,clip_192,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,8,clip_215,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,9,clip_208,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,10,clip_184,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,11,clip_229,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,12,clip_207,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,13,clip_196,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,14,clip_204,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,15,clip_185,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,16,clip_195,yes,questionable_noise_or_transient,excluded_questionable_sensor_fit,no,Sensor placement was still being corrected during this block.
+self_20260531_220954,17,clip_223,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,18,clip_221,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,19,clip_232,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,20,clip_191,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,21,clip_186,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,22,clip_201,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,23,clip_240,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,24,clip_213,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,25,clip_206,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,26,clip_226,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,27,clip_161,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,28,clip_158,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,29,clip_159,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,30,clip_176,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,31,clip_193,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,32,clip_203,yes,questionable_noise_or_transient,excluded_reconnection_transient,no,Brief reconnection window is too transient to trust as primary biometric data.
+self_20260531_220954,33,clip_219,yes,questionable_noise_or_transient,excluded_reconnection_transient,no,Brief reconnection window is too transient to trust as primary biometric data.
+self_20260531_220954,34,clip_210,yes,questionable_noise_or_transient,excluded_reconnection_transient,no,Brief reconnection window is too transient to trust as primary biometric data.
+self_20260531_220954,35,clip_222,yes,questionable_noise_or_transient,excluded_reconnection_transient,no,Brief reconnection window is too transient to trust as primary biometric data.
+self_20260531_220954,36,clip_234,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,37,clip_217,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,38,clip_181,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,39,clip_179,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,40,clip_175,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,41,clip_194,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,42,clip_154,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,43,clip_170,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,44,clip_235,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,45,clip_231,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,46,clip_180,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,47,clip_152,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,48,clip_227,yes,invalid_lead_artifact,excluded_disconnected_lead_artifact,no,Disconnected lead produced a repetitive artificial oscillation.
+self_20260531_220954,49,clip_202,yes,questionable_noise_or_transient,excluded_unverified_capture,no,Capture has not been verified for primary biometric training.
+self_20260531_220954,50,,no,questionable_noise_or_transient,excluded_unrated_capture,no,No saved human rating exists for this sensor capture.
