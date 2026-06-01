@@ -690,6 +690,7 @@ data/archive/pre_real_take_20260531_154526/
 data/archive/official_run_1_checkpoint_20260531_170217/
 data/archive/continuation_hardware_issue_checkpoint_20260531_231446/
 data/archive/pre_clean_reverse_20260601_002708/
+data/archive/clean_reverse_hardware_checks_20260601_112050/
 ```
 
 Do not delete these without explicit approval.
@@ -900,6 +901,42 @@ PYTHONPATH=src .venv/bin/python src/sensors/audit_eda_quality.py data/raw/sensor
 ```
 
 The result should be inspected before Jason invests more time. A moving chart is not sufficient evidence.
+
+### Latest Hardware Check
+
+Jason repeated the one-song hardware check on June 1, 2026. The dashboard retained its auto-generated session ID, so the actual sensor file is:
+
+```text
+data/raw/sensor/self_20260601_111921_sensor.csv
+```
+
+The file contains one complete `clip_001` capture:
+
+| Metric | Value |
+| --- | ---: |
+| Total rows | `2439` |
+| Rest rows | `982` |
+| Listen rows | `1457` |
+| Approximate sample rate | `49 Hz` |
+| Missing EDA values | `0` |
+| Missing elapsed-time values | `0` |
+| Non-positive elapsed-time steps | `0` |
+| Median adjacent EDA change | `0.0048` |
+| Fraction of adjacent EDA changes >= `0.02` | `0.034` |
+
+The conservative audit script labels this `questionable_noise_or_transient`, but the stream does **not** resemble the disconnected-lead artifact. The known unplugged-lead block was roughly `0.04 / 70%+` on the same two change metrics. An earlier accepted final dry run was roughly `0.0025 / 3.3%`.
+
+Interpretation:
+
+- The latest check passes the numeric screen for the previously observed disconnected-lead failure.
+- A CSV cannot prove physical sensor placement.
+- Before launching block `01`, Jason must manually confirm that both leads are firmly attached and the sensors are worn in the corrected position.
+
+Both one-song clean-reverse checks are preserved in:
+
+```text
+data/archive/clean_reverse_hardware_checks_20260601_112050/
+```
 
 ### Step 3: Launch The First Ordered Reverse Block
 

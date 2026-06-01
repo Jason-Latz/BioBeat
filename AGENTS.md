@@ -65,12 +65,14 @@ Do not leave that learning only in chat history.
 - For Jason's next BioBeat clean rerecord, preserve every historical raw file and use new session IDs. Collect the full catalog in explicit descending clip order so deeper-cut and previously uncollected songs are recorded first.
 - Do not run Jason's full clean rerecord as one uninterrupted 240-song session. Use bounded reverse-order blocks with a hardware-fit dry run before block 1 and numerical EDA QC between blocks.
 - For ordered BioBeat batch collection, launch `src/dashboard/batch_app.py` with `BIOBEAT_CLIP_ORDER=csv`. Leave the default shuffle mode intact for unrelated runs.
+- When Jason finishes a BioBeat dry run, discover the actual newest raw sensor CSV before auditing it. The dashboard defaults to an auto-generated `self_YYYYMMDD_HHMMSS` session ID unless Jason manually replaces the field.
+- In zsh validation snippets, do not use `path` as a local variable name. zsh ties `path` to `PATH`, so assigning it can make commands such as `tail` unavailable.
 
 ## Active Issues Before Next Attempt
 
 - The intended collector URL is `http://127.0.0.1:8503/`.
 - The historical continuation launcher was stopped before clean-reverse preparation. Relaunch `8503` with `BIOBEAT_CLIP_ORDER=csv` and the intended clean-reverse batch only.
-- Before block `01`, run `data/collection_batches/clean_reverse_hardware_check_1.csv` in a fresh `hardware_check_reverse_20260601_1` session and audit the saved EDA numerically.
+- The latest clean-reverse hardware check is `data/raw/sensor/self_20260601_111921_sensor.csv`. It passed the disconnected-lead screen numerically but still requires Jason's manual confirmation that the sensors are worn correctly and both leads are firmly attached before block `01`.
 - The six clean reverse queues are `data/collection_batches/clean_reverse_b01_240_201.csv` through `data/collection_batches/clean_reverse_b06_040_001.csv`.
 - The pre-rerecord snapshot is `data/archive/pre_clean_reverse_20260601_002708/`.
 - Apple Watch HR has not yet been imported into either real session.
