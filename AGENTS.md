@@ -72,7 +72,8 @@ Do not leave that learning only in chat history.
 
 - The intended collector URL is `http://127.0.0.1:8503/`.
 - The historical continuation launcher was stopped before clean-reverse preparation. Relaunch `8503` with `BIOBEAT_CLIP_ORDER=csv` and the intended clean-reverse batch only.
-- The latest clean-reverse hardware check is `data/raw/sensor/self_20260601_111921_sensor.csv`. It passed the disconnected-lead screen numerically but still requires Jason's manual confirmation that the sensors are worn correctly and both leads are firmly attached before block `01`.
+- The latest clean-reverse hardware check is `data/raw/sensor/self_20260601_111921_sensor.csv`. It passed the disconnected-lead screen numerically, and Jason manually confirmed corrected placement and firm lead attachment before block `01`.
+- Clean reverse block `01` is `data/collection_batches/clean_reverse_b01_240_201.csv`, launched on `8503` with `BIOBEAT_CLIP_ORDER=csv`. Audit the completed block before launching block `02`.
 - The six clean reverse queues are `data/collection_batches/clean_reverse_b01_240_201.csv` through `data/collection_batches/clean_reverse_b06_040_001.csv`.
 - The pre-rerecord snapshot is `data/archive/pre_clean_reverse_20260601_002708/`.
 - Apple Watch HR has not yet been imported into either real session.

@@ -930,13 +930,32 @@ Interpretation:
 
 - The latest check passes the numeric screen for the previously observed disconnected-lead failure.
 - A CSV cannot prove physical sensor placement.
-- Before launching block `01`, Jason must manually confirm that both leads are firmly attached and the sensors are worn in the corrected position.
+- Jason manually confirmed that both leads were firmly attached and the sensors were worn in the corrected position before block `01` was launched.
 
 Both one-song clean-reverse checks are preserved in:
 
 ```text
 data/archive/clean_reverse_hardware_checks_20260601_112050/
 ```
+
+### Active Clean-Reverse Block
+
+Block `01` was launched on `http://127.0.0.1:8503/` after the numeric check and Jason's physical confirmation.
+
+```text
+BIOBEAT_CLIPS_CSV=data/collection_batches/clean_reverse_b01_240_201.csv
+BIOBEAT_CLIP_ORDER=csv
+```
+
+Verified order:
+
+```text
+clip_240 Roads - Portishead
+...
+clip_201 So Hot You're Hurting My Feelings - Caroline Polachek
+```
+
+Do not relaunch block `02` until block `01` has ended and its saved EDA CSV has been audited.
 
 ### Step 3: Launch The First Ordered Reverse Block
 
