@@ -62,6 +62,14 @@ Starter song requests live in `data/input/desired_songs.csv`. The iTunes builder
 
 Experiment labels are written incrementally to `data/raw/labels/{session_id}_labels.csv`. Raw sensor samples are written to `data/raw/sensor/{session_id}_sensor.csv`. It is fine for individual rows to contain only HR or only EDA; the feature extractor summarizes whichever values are present.
 
+For the audited real-session export, run:
+
+```bash
+PYTHONPATH=src .venv/bin/python src/features/export_good_real_data.py
+```
+
+This writes `data/processed/good_real_data.csv` with usable human ratings and `data/processed/real_eda_quality_manifest.csv` with the per-trial EDA audit. The current curated ratings export deliberately marks EDA as excluded from primary biometric training because the recorded sessions contain known sensor-fit and disconnected-lead issues.
+
 The sensor feature extractor writes `data/processed/biometric_features_real.csv` using this schema:
 
 ```csv
