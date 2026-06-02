@@ -246,6 +246,14 @@ python src/models/recommend.py --target-mood all --user-id jason
 
 Replace `jason` and `jason_s01` with the IDs you used in the dashboard.
 
+To use the recommendation website after the model and calibration profile are ready:
+
+```bash
+PYTHONPATH=src .venv/bin/streamlit run src/recommender/app.py --server.port 8505 --server.address 127.0.0.1
+```
+
+The website lists calibrated users, applies the selected user's profile, asks for the desired mood, and displays the ranked playlist with preview audio.
+
 ## If Sensors Are Not Ready
 
 Use mock data:

@@ -34,6 +34,14 @@ python src/models/recommend.py --target-mood all --user-id demo_user
 
 The dashboard is the training collection UI. It first reminds the participant to start an Apple Watch Workout, then runs a streamlined loop: 20-second rest recording, automatic 30-second song playback/recording, then two large rating-button prompts for emotion and familiarity. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
 
+To run the separate trained-model playlist app after models and calibration profiles exist:
+
+```bash
+PYTHONPATH=src .venv/bin/streamlit run src/recommender/app.py --server.port 8505 --server.address 127.0.0.1
+```
+
+The playlist app assumes the trained `.joblib` files and `data/processed/user_calibration_profiles.csv` already exist. The user selects their name, chooses a desired mood, and BioBeat displays a ranked playlist with iTunes previews.
+
 The Raspberry Pi Pico stream for the Seeed GSR sensor can print any of these formats:
 
 ```text

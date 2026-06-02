@@ -69,6 +69,7 @@ Do not leave that learning only in chat history.
 - In zsh validation snippets, do not use `path` as a local variable name. zsh ties `path` to `PATH`, so assigning it can make commands such as `tail` unavailable.
 - For BioBeat blocks collected by another person on another computer, publish a deterministic checked launcher and a concise remote runbook. Require a distinct participant ID, a fresh session ID, a one-song hardware check, and numerical EDA audit on that computer before the long block starts.
 - Clean-reverse block `01` session `self_20260601_112658` is the cleanest real EDA block collected so far. Preserve it as a primary biometric-training candidate while keeping Apple Watch HR import status separate.
+- BioBeat should have a separate trained-model recommendation website from the collector: select a calibrated user from existing profiles, select a desired mood, and display a ranked playlist without touching live collection state.
 
 ## Active Issues Before Next Attempt
 

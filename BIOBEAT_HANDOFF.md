@@ -187,6 +187,22 @@ BIOBEAT_CLIPS_CSV
 
 and launches the same hardened dashboard using only the selected batch CSV.
 
+### Trained-Model Playlist App
+
+The separate recommendation website is:
+
+```text
+src/recommender/app.py
+```
+
+Launch it after trained model artifacts and `data/processed/user_calibration_profiles.csv` exist:
+
+```text
+PYTHONPATH=src .venv/bin/streamlit run src/recommender/app.py --server.port 8505 --server.address 127.0.0.1
+```
+
+This app does not run live collection. It lists calibrated users, applies the selected calibration profile, asks for a desired mood, and displays a ranked playlist with iTunes preview audio.
+
 ### Serial Reader Behavior
 
 The relevant code is:

@@ -141,6 +141,26 @@ def recommend(
     calibration_profiles_path: Path = CALIBRATION_PROFILES_CSV,
 ) -> pd.DataFrame:
     ensure_project_dirs()
+    result = rank_recommendations(
+        clips_path,
+        audio_features_path,
+        user_id=user_id,
+        target_mood=target_mood,
+        calibration_profiles_path=calibration_profiles_path,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(output_path, index=False)
+    return result
+
+
+def rank_recommendations(
+    clips_path: Path,
+    audio_features_path: Path,
+    *,
+    user_id: str,
+    target_mood: str,
+    calibration_profiles_path: Path = CALIBRATION_PROFILES_CSV,
+) -> pd.DataFrame:
     table = candidate_table(clips_path, audio_features_path, user_id=user_id)
     arousal_bundle = load_bundle(AROUSAL_MODEL)
     valence_bundle = load_bundle(VALENCE_MODEL)
@@ -155,10 +175,7 @@ def recommend(
         score_for_mood(table, target_mood=mood, arousal=arousal, valence_probs=valence_probs)
         for mood in moods
     ]
-    result = pd.concat(frames, ignore_index=True)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    result.to_csv(output_path, index=False)
-    return result
+    return pd.concat(frames, ignore_index=True)
 
 
 def main() -> None:
