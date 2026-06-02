@@ -13,10 +13,10 @@ from biobeat_paths import MODELS_DIR, PROCESSED_DIR, TRAINING_TABLE_CSV, ensure_
 from features.target_features import BIOMETRIC_COLUMNS, VALENCE_LABELS, add_model_targets  # noqa: E402
 from models.prediction_utils import load_bundle, predict_class_probabilities, predict_regression  # noqa: E402
 
-
+# final models: gradient boosted for both, after hyperparam tuning
 DEFAULT_OUTPUT = PROCESSED_DIR / "user_calibration_profiles.csv"
-AROUSAL_MODEL = MODELS_DIR / "arousal_score_audio_random_forest_regressor.joblib"
-VALENCE_MODEL = MODELS_DIR / "valence_label_audio_random_forest_classifier.joblib"
+AROUSAL_MODEL = MODELS_DIR / "arousal_score_audio_gradient_boosting_selected.joblib"
+VALENCE_MODEL = MODELS_DIR / "valence_label_audio_gradient_boosting_selected.joblib"
 
 
 def calibration_rows(

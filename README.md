@@ -88,6 +88,14 @@ The merger adds normalized model targets:
 
 Jason's recent real labels contain numeric `valence` plus string `mood`; the pipeline prefers the string `mood` label and converts numeric legacy values only as a fallback.
 
+To calibrate Jason's current self profile after the clean `official_run_2` session, run:
+
+```bash
+python src/models/calibrate_user.py --user-id official_run_2 --session-id self_20260601_112658 --max-clips 5
+```
+
+This writes `data/processed/user_calibration_profiles.csv`. Recommendations for the same user ID will automatically apply that calibration profile.
+
 ## Project Structure
 
 ```text

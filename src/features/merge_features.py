@@ -162,7 +162,9 @@ def merge_features(
         use_eda = table.get("use_eda_for_primary_biometric_training", "yes")
         if not isinstance(use_eda, pd.Series):
             use_eda = pd.Series("yes", index=table.index)
-        excluded = use_eda.astype(str).str.lower().ne("yes")
+        # Missing manifest rows are common for fresh calibration sessions. Only mask
+        # EDA when the quality manifest explicitly marks the trial as not usable.
+        excluded = use_eda.notna() & use_eda.astype(str).str.lower().isin({"no", "false", "0"})
         for column in EDA_COLUMNS:
             if column in table.columns:
                 table.loc[excluded, column] = pd.NA
