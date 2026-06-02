@@ -11,7 +11,14 @@ def read_trial_values(path: Path) -> dict[int, list[float]]:
     trials: dict[int, list[float]] = defaultdict(list)
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            trials[int(row["trial_index"])].append(float(row["eda"]))
+            eda = str(row.get("eda", "")).strip()
+            if not eda:
+                continue
+            try:
+                value = float(eda)
+            except ValueError:
+                continue
+            trials[int(row["trial_index"])].append(value)
     return dict(trials)
 
 

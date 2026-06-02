@@ -15,6 +15,7 @@ REAL_SESSIONS = (
     "self_20260531_155844",
     "self_20260531_220954",
     "self_20260601_112658",
+    "self_20260601_210739",
 )
 GOOD_REAL_DATA_CSV = PROCESSED_DIR / "good_real_data.csv"
 EDA_QUALITY_MANIFEST_CSV = PROCESSED_DIR / "real_eda_quality_manifest.csv"

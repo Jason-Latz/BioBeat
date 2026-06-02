@@ -20,10 +20,22 @@ BASE_FEATURE_COLUMNS = [
     "clip_id",
     "duration_sec",
     "tempo",
+    "beat_count",
+    "beat_rate",
+    "beat_interval_mean",
+    "beat_interval_std",
+    "rhythm_regularity",
+    "onset_rate",
     "rms_energy_mean",
     "rms_energy_std",
     "rms_energy_range",
     "rms_energy_slope",
+    "loudness_db_mean",
+    "loudness_db_std",
+    "loudness_db_range",
+    "loudness_db_p10",
+    "loudness_db_p90",
+    "quiet_fraction",
     "zero_crossing_rate_mean",
     "zero_crossing_rate_std",
     "spectral_centroid_mean",
@@ -37,6 +49,11 @@ BASE_FEATURE_COLUMNS = [
     "spectral_contrast_std",
     "onset_strength_mean",
     "onset_strength_std",
+    "mode_major",
+    "mode_confidence",
+    "key_pitch_class",
+    "major_key_correlation",
+    "minor_key_correlation",
 ]
 FEATURE_COLUMNS = (
     BASE_FEATURE_COLUMNS
@@ -69,6 +86,74 @@ def feature_slope(values: np.ndarray) -> float:
     return float(np.polyfit(x, flat, 1)[0])
 
 
+def safe_mean(values: np.ndarray) -> float:
+    flat = np.ravel(values).astype(float)
+    return float(np.mean(flat)) if flat.size else 0.0
+
+
+def safe_std(values: np.ndarray) -> float:
+    flat = np.ravel(values).astype(float)
+    return float(np.std(flat)) if flat.size else 0.0
+
+
+def estimate_mode_features(chroma: np.ndarray) -> dict[str, float]:
+    major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+    minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+    chroma_mean = np.mean(chroma, axis=1).astype(float)
+
+    if not np.any(chroma_mean):
+        return {
+            "mode_major": 0.0,
+            "mode_confidence": 0.0,
+            "key_pitch_class": 0.0,
+            "major_key_correlation": 0.0,
+            "minor_key_correlation": 0.0,
+        }
+
+    chroma_centered = chroma_mean - np.mean(chroma_mean)
+    if np.linalg.norm(chroma_centered) == 0:
+        return {
+            "mode_major": 0.0,
+            "mode_confidence": 0.0,
+            "key_pitch_class": 0.0,
+            "major_key_correlation": 0.0,
+            "minor_key_correlation": 0.0,
+        }
+    major_centered = major_profile - np.mean(major_profile)
+    minor_centered = minor_profile - np.mean(minor_profile)
+
+    major_scores = [
+        float(np.corrcoef(chroma_centered, np.roll(major_centered, pitch_class))[0, 1])
+        for pitch_class in range(12)
+    ]
+    minor_scores = [
+        float(np.corrcoef(chroma_centered, np.roll(minor_centered, pitch_class))[0, 1])
+        for pitch_class in range(12)
+    ]
+    best_major = max(major_scores)
+    best_minor = max(minor_scores)
+    mode_is_major = best_major >= best_minor
+    best_score = best_major if mode_is_major else best_minor
+    runner_up = best_minor if mode_is_major else best_major
+    key_pitch_class = major_scores.index(best_major) if mode_is_major else minor_scores.index(best_minor)
+
+    return {
+        "mode_major": float(mode_is_major),
+        "mode_confidence": float(max(0.0, best_score - runner_up)),
+        "key_pitch_class": float(key_pitch_class),
+        "major_key_correlation": float(best_major),
+        "minor_key_correlation": float(best_minor),
+    }
+
+
+def row_has_complete_features(row: dict[str, object]) -> bool:
+    for column in FEATURE_COLUMNS:
+        value = row.get(column)
+        if value is None or value == "" or pd.isna(value):
+            return False
+    return True
+
+
 def extract_features_from_preview(preview_url: str) -> dict[str, float]:
     try:
         import librosa
@@ -89,24 +174,47 @@ def extract_features_from_preview(preview_url: str) -> dict[str, float]:
     if y.size == 0:
         raise RuntimeError("Downloaded preview contained no audio samples.")
 
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    duration_sec = float(librosa.get_duration(y=y, sr=sr))
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+    beat_intervals = np.diff(beat_times)
     rms = librosa.feature.rms(y=y)
+    rms_db = librosa.amplitude_to_db(rms, ref=1.0)
     zcr = librosa.feature.zero_crossing_rate(y)
     centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
     bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)
     rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
     contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
     onset_strength = librosa.onset.onset_strength(y=y, sr=sr)
+    onset_events = librosa.onset.onset_detect(y=y, sr=sr, onset_envelope=onset_strength)
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    mode_features = estimate_mode_features(chroma)
+    beat_interval_mean = safe_mean(beat_intervals)
+    beat_interval_std = safe_std(beat_intervals)
+    rhythm_regularity = 0.0
+    if beat_interval_mean > 0:
+        rhythm_regularity = float(1.0 / (1.0 + beat_interval_std / beat_interval_mean))
 
     features = {
-        "duration_sec": float(librosa.get_duration(y=y, sr=sr)),
+        "duration_sec": duration_sec,
         "tempo": float(np.ravel(tempo)[0]),
+        "beat_count": float(len(beat_frames)),
+        "beat_rate": float(len(beat_frames) / duration_sec) if duration_sec else 0.0,
+        "beat_interval_mean": beat_interval_mean,
+        "beat_interval_std": beat_interval_std,
+        "rhythm_regularity": rhythm_regularity,
+        "onset_rate": float(len(onset_events) / duration_sec) if duration_sec else 0.0,
         "rms_energy_mean": float(np.mean(rms)),
         "rms_energy_std": float(np.std(rms)),
         "rms_energy_range": float(np.max(rms) - np.min(rms)),
         "rms_energy_slope": feature_slope(rms),
+        "loudness_db_mean": float(np.mean(rms_db)),
+        "loudness_db_std": float(np.std(rms_db)),
+        "loudness_db_range": float(np.max(rms_db) - np.min(rms_db)),
+        "loudness_db_p10": float(np.percentile(rms_db, 10)),
+        "loudness_db_p90": float(np.percentile(rms_db, 90)),
+        "quiet_fraction": float(np.mean(rms_db < -45.0)),
         "zero_crossing_rate_mean": float(np.mean(zcr)),
         "zero_crossing_rate_std": float(np.std(zcr)),
         "spectral_centroid_mean": float(np.mean(centroid)),
@@ -120,6 +228,7 @@ def extract_features_from_preview(preview_url: str) -> dict[str, float]:
         "spectral_contrast_std": float(np.std(contrast)),
         "onset_strength_mean": float(np.mean(onset_strength)),
         "onset_strength_std": float(np.std(onset_strength)),
+        **mode_features,
     }
 
     for index, value in enumerate(np.mean(chroma, axis=1), start=1):
@@ -137,7 +246,7 @@ def extract_features_from_preview(preview_url: str) -> dict[str, float]:
 def load_existing_features(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame(columns=FEATURE_COLUMNS)
-    return pd.read_csv(path)
+    return pd.read_csv(path).reindex(columns=FEATURE_COLUMNS)
 
 
 def write_feature_rows(path: Path, rows: list[dict[str, object]]) -> None:
@@ -158,8 +267,13 @@ def extract_all_features(
     ensure_project_dirs()
     clips = pd.read_csv(clips_path)
     existing = load_existing_features(output_path)
-    completed_clip_ids = set(existing["clip_id"].astype(str)) if not existing.empty and not force else set()
-    rows = [] if force else existing.to_dict("records")
+    existing_by_clip: dict[str, dict[str, object]] = {}
+    if not force and not existing.empty:
+        existing_by_clip = {
+            str(row["clip_id"]): row
+            for row in existing.to_dict("records")
+            if pd.notna(row.get("clip_id"))
+        }
     processed_any = False
 
     if limit is not None:
@@ -167,7 +281,8 @@ def extract_all_features(
 
     for _, clip in clips.iterrows():
         clip_id = str(clip["clip_id"])
-        if clip_id in completed_clip_ids:
+        existing_row = existing_by_clip.get(clip_id)
+        if existing_row is not None and row_has_complete_features(existing_row):
             print(f"Skipping cached audio features for {clip_id}")
             continue
 
@@ -178,11 +293,11 @@ def extract_all_features(
             print(f"Failed to extract {clip_id}: {exc}", file=sys.stderr)
             continue
 
-        rows.append({"clip_id": clip_id, **features})
+        existing_by_clip[clip_id] = {"clip_id": clip_id, **features}
         processed_any = True
-        write_feature_rows(output_path, rows)
+        write_feature_rows(output_path, list(existing_by_clip.values()))
 
-    result = pd.DataFrame(rows)
+    result = pd.DataFrame(list(existing_by_clip.values()))
     if not result.empty and (force or processed_any or not output_path.exists()):
         result = result.reindex(columns=FEATURE_COLUMNS)
         result.to_csv(output_path, index=False)

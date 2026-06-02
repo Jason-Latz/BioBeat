@@ -7,9 +7,18 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    ExtraTreesRegressor,
+    GradientBoostingClassifier,
+    GradientBoostingRegressor,
+    RandomForestClassifier,
+    RandomForestRegressor,
+)
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -19,6 +28,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC, SVR
 from sklearn.preprocessing import StandardScaler
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -151,31 +161,116 @@ def fit_regression_models(
         return f"# {model_prefix}\n\nSkipped because no labeled rows had observed feature values.\n"
 
     X_train, X_test, y_train, y_test, split_note = split_regression(X, y, seed)
-    ridge = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("model", Ridge(alpha=1.0)),
-        ]
-    )
-    forest = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            (
-                "model",
-                RandomForestRegressor(
-                    n_estimators=400,
-                    random_state=seed,
-                    min_samples_leaf=2,
-                ),
+    n_neighbors = max(1, min(7, len(X_train)))
+
+    regression_models: list[tuple[str, Pipeline]] = [
+        (
+            "ridge_regression",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    ("model", Ridge(alpha=1.0)),
+                ]
             ),
-        ]
-    )
+        ),
+        (
+            "random_forest_regressor",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        RandomForestRegressor(
+                            n_estimators=400,
+                            random_state=seed,
+                            min_samples_leaf=2,
+                        ),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "extra_trees_regressor",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        ExtraTreesRegressor(
+                            n_estimators=500,
+                            random_state=seed,
+                            min_samples_leaf=2,
+                            max_features="sqrt",
+                        ),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "gradient_boosting_regressor",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        GradientBoostingRegressor(
+                            n_estimators=150,
+                            learning_rate=0.04,
+                            max_depth=2,
+                            random_state=seed,
+                        ),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "svr_rbf",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    ("model", SVR(kernel="rbf", C=1.0, epsilon=0.08, gamma="scale")),
+                ]
+            ),
+        ),
+        (
+            "knn_regressor",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    ("model", KNeighborsRegressor(n_neighbors=n_neighbors, weights="distance")),
+                ]
+            ),
+        ),
+        (
+            "mlp_regressor",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    (
+                        "model",
+                        MLPRegressor(
+                            hidden_layer_sizes=(16,),
+                            activation="relu",
+                            alpha=0.01,
+                            learning_rate_init=0.001,
+                            max_iter=2000,
+                            random_state=seed,
+                        ),
+                    ),
+                ]
+            ),
+        ),
+    ]
 
-    ridge.fit(X_train, y_train)
-    forest.fit(X_train, y_train)
-
-    for model_name, model in [("ridge_regression", ridge), ("random_forest_regressor", forest)]:
+    report_sections: list[str] = []
+    fitted_models: dict[str, Pipeline] = {}
+    for model_name, model in regression_models:
+        model.fit(X_train, y_train)
+        fitted_models[model_name] = model
         bundle = {
             "target": target,
             "feature_columns": observed_columns,
@@ -188,19 +283,24 @@ def fit_regression_models(
             "split_note": split_note,
         }
         joblib.dump(bundle, MODELS_DIR / f"{model_prefix}_{model_name}.joblib")
+        pretty_name = model_name.replace("_", " ").title()
+        report_sections.append(
+            f"## {pretty_name}\n\n"
+            f"{regression_report(model, X_test, y_test, prediction_min=prediction_min, prediction_max=prediction_max)}\n"
+        )
 
-    forest_model = forest.named_steps["model"]
+    forest_model = fitted_models["random_forest_regressor"].named_steps["model"]
+    extra_trees_model = fitted_models["extra_trees_regressor"].named_steps["model"]
     return (
         f"# {model_prefix}\n\n"
         f"rows: {len(y)}\n"
         f"target_mean: {float(y.mean()):.3f}\n"
         f"split: {split_note}\n\n"
-        "## Ridge regression\n\n"
-        f"{regression_report(ridge, X_test, y_test, prediction_min=prediction_min, prediction_max=prediction_max)}\n\n"
-        "## Random forest regressor\n\n"
-        f"{regression_report(forest, X_test, y_test, prediction_min=prediction_min, prediction_max=prediction_max)}\n\n"
-        "## Random forest feature importance\n\n"
-        f"{forest_importance_text(forest_model, observed_columns)}\n"
+        + "\n".join(report_sections)
+        + "\n## Random forest feature importance\n\n"
+        f"{forest_importance_text(forest_model, observed_columns)}\n\n"
+        "## Extra trees feature importance\n\n"
+        f"{forest_importance_text(extra_trees_model, observed_columns)}\n"
     )
 
 
@@ -242,34 +342,121 @@ def fit_valence_classifier(
         joblib.dump(bundle, MODELS_DIR / f"{model_prefix}_random_forest_classifier.joblib")
         return f"# {model_prefix}\n\nOnly one class was present: {y.iloc[0]}.\n"
 
-    logistic = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            (
-                "model",
-                LogisticRegression(max_iter=1000, class_weight="balanced"),
-            ),
-        ]
-    )
-    forest = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            (
-                "model",
-                RandomForestClassifier(
-                    n_estimators=400,
-                    random_state=seed,
-                    class_weight="balanced",
-                    min_samples_leaf=2,
-                ),
-            ),
-        ]
-    )
-    logistic.fit(X_train, y_train)
-    forest.fit(X_train, y_train)
+    n_neighbors = max(1, min(7, len(X_train)))
 
-    for model_name, model in [("logistic_regression", logistic), ("random_forest_classifier", forest)]:
+    classification_models: list[tuple[str, Pipeline]] = [
+        (
+            "logistic_regression",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    (
+                        "model",
+                        LogisticRegression(max_iter=1000, class_weight="balanced"),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "random_forest_classifier",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        RandomForestClassifier(
+                            n_estimators=400,
+                            random_state=seed,
+                            class_weight="balanced",
+                            min_samples_leaf=2,
+                        ),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "extra_trees_classifier",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        ExtraTreesClassifier(
+                            n_estimators=500,
+                            random_state=seed,
+                            class_weight="balanced",
+                            min_samples_leaf=2,
+                            max_features="sqrt",
+                        ),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "gradient_boosting_classifier",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    (
+                        "model",
+                        GradientBoostingClassifier(
+                            n_estimators=120,
+                            learning_rate=0.04,
+                            max_depth=2,
+                            random_state=seed,
+                        ),
+                    ),
+                ]
+            ),
+        ),
+        (
+            "svc_rbf",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    ("model", SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced")),
+                ]
+            ),
+        ),
+        (
+            "knn_classifier",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    ("model", KNeighborsClassifier(n_neighbors=n_neighbors, weights="distance")),
+                ]
+            ),
+        ),
+        (
+            "mlp_classifier",
+            Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                    (
+                        "model",
+                        MLPClassifier(
+                            hidden_layer_sizes=(16,),
+                            activation="relu",
+                            alpha=0.01,
+                            learning_rate_init=0.001,
+                            max_iter=2000,
+                            random_state=seed,
+                        ),
+                    ),
+                ]
+            ),
+        ),
+    ]
+
+    report_sections: list[str] = []
+    fitted_models: dict[str, Pipeline] = {}
+    for model_name, model in classification_models:
+        model.fit(X_train, y_train)
+        fitted_models[model_name] = model
         bundle = {
             "target": "valence_label",
             "feature_columns": observed_columns,
@@ -281,19 +468,24 @@ def fit_valence_classifier(
             "split_note": split_note,
         }
         joblib.dump(bundle, MODELS_DIR / f"{model_prefix}_{model_name}.joblib")
+        pretty_name = model_name.replace("_", " ").title()
+        report_sections.append(
+            f"## {pretty_name}\n\n"
+            f"{classification_report_text(model, X_test, y_test)}\n"
+        )
 
-    forest_model = forest.named_steps["model"]
+    forest_model = fitted_models["random_forest_classifier"].named_steps["model"]
+    extra_trees_model = fitted_models["extra_trees_classifier"].named_steps["model"]
     return (
         f"# {model_prefix}\n\n"
         f"rows: {len(y)}\n"
         f"class_counts: {class_counts}\n"
         f"split: {split_note}\n\n"
-        "## Logistic regression\n\n"
-        f"{classification_report_text(logistic, X_test, y_test)}\n\n"
-        "## Random forest classifier\n\n"
-        f"{classification_report_text(forest, X_test, y_test)}\n\n"
-        "## Random forest feature importance\n\n"
-        f"{forest_importance_text(forest_model, observed_columns)}\n"
+        + "\n".join(report_sections)
+        + "\n## Random forest feature importance\n\n"
+        f"{forest_importance_text(forest_model, observed_columns)}\n\n"
+        "## Extra trees feature importance\n\n"
+        f"{forest_importance_text(extra_trees_model, observed_columns)}\n"
     )
 
 
