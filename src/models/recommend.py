@@ -4,157 +4,156 @@ import argparse
 import sys
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from biobeat_paths import (  # noqa: E402
-    AUDIO_FEATURES_CSV,
-    CLIPS_CSV,
-    FAKE_BIOMETRICS_CSV,
-    MODELS_DIR,
-    RECOMMENDATIONS_CSV,
-    ensure_project_dirs,
-    repo_path,
-)
+from biobeat_paths import AUDIO_FEATURES_CSV, CLIPS_CSV, MODELS_DIR, PROCESSED_DIR, RECOMMENDATIONS_CSV, ensure_project_dirs, repo_path  # noqa: E402
+from features.target_features import VALENCE_LABELS  # noqa: E402
+from models.prediction_utils import load_bundle, predict_class_probabilities, predict_regression  # noqa: E402
 
 
-TARGET_MODEL_FILES = {
-    "preference_binary": "preference_binary_random_forest.joblib",
-    "arousal_binary": "arousal_binary_random_forest.joblib",
-    "valence_binary": "valence_binary_random_forest.joblib",
+AROUSAL_MODEL = MODELS_DIR / "arousal_score_audio_random_forest_regressor.joblib"
+VALENCE_MODEL = MODELS_DIR / "valence_label_audio_random_forest_classifier.joblib"
+CALIBRATION_PROFILES_CSV = PROCESSED_DIR / "user_calibration_profiles.csv"
+
+MOOD_TARGETS = {
+    "calm": ("neutral", 0.20),
+    "relaxed": ("positive", 0.20),
+    "happy": ("positive", 0.45),
+    "excited": ("positive", 0.85),
+    "hype": ("positive", 0.85),
+    "sad": ("negative", 0.20),
+    "tense": ("negative", 0.80),
+    "angry": ("negative", 0.90),
+    "neutral": ("neutral", 0.35),
+    "alert": ("neutral", 0.75),
 }
+DEFAULT_ALL_MOODS = ["relaxed", "excited", "sad", "tense", "neutral"]
 
 
-def load_bundle(target: str) -> dict[str, object]:
-    path = MODELS_DIR / TARGET_MODEL_FILES[target]
-    if not path.exists():
-        raise FileNotFoundError(f"{path} does not exist. Run src/models/train_models.py first.")
-    return joblib.load(path)
-
-
-def predict_positive_probability(bundle: dict[str, object], rows: pd.DataFrame) -> np.ndarray:
-    columns = list(bundle["feature_columns"])
-    X = rows.reindex(columns=columns).apply(pd.to_numeric, errors="coerce")
-    constant = bundle.get("constant_probability")
-    model = bundle.get("model")
-    if model is None or constant is not None:
-        return np.full(len(X), float(constant or 0.0))
-
-    probabilities = model.predict_proba(X)
-    classes = list(model.classes_)
-    if 1 not in classes:
-        return np.zeros(len(X), dtype=float)
-    return probabilities[:, classes.index(1)]
-
-
-def candidate_table(
-    clips_path: Path,
-    audio_features_path: Path,
-    biometric_features_path: Path,
-    *,
-    user_id: str,
-    session_id: str | None,
-) -> pd.DataFrame:
+def candidate_table(clips_path: Path, audio_features_path: Path, *, user_id: str) -> pd.DataFrame:
     clips = pd.read_csv(clips_path)
     audio = pd.read_csv(audio_features_path)
-    biometrics = pd.read_csv(biometric_features_path)
-
-    user_biometrics = biometrics[biometrics["user_id"].astype(str) == str(user_id)].copy()
-    if user_biometrics.empty:
-        user_biometrics = biometrics.copy()
-        user_biometrics["user_id"] = user_id
-
-    if session_id:
-        session_rows = user_biometrics[user_biometrics["session_id"].astype(str) == str(session_id)].copy()
-        if not session_rows.empty:
-            user_biometrics = session_rows
-    elif "session_id" in user_biometrics.columns:
-        selected_session = sorted(user_biometrics["session_id"].astype(str).unique())[-1]
-        user_biometrics = user_biometrics[user_biometrics["session_id"].astype(str) == selected_session]
-
-    table = clips.merge(audio, on="clip_id", how="left").merge(
-        user_biometrics,
-        on="clip_id",
-        how="left",
-        suffixes=("", "_biometric"),
-    )
+    table = clips.merge(audio, on="clip_id", how="left")
     table["user_id"] = user_id
-    if "session_id" not in table.columns or table["session_id"].isna().all():
-        table["session_id"] = session_id or "recommendation_session"
-
     numeric_columns = table.select_dtypes(include=["number"]).columns
     table[numeric_columns] = table[numeric_columns].fillna(table[numeric_columns].median(numeric_only=True))
     table[numeric_columns] = table[numeric_columns].fillna(0)
     return table
 
 
-def score_recommendations(table: pd.DataFrame, target_mode: str) -> pd.DataFrame:
-    preference_bundle = load_bundle("preference_binary")
-    arousal_bundle = load_bundle("arousal_binary")
-    valence_bundle = load_bundle("valence_binary")
+def load_user_profile(path: Path, user_id: str) -> pd.Series | None:
+    if not path.exists():
+        return None
+    profiles = pd.read_csv(path)
+    if profiles.empty or "user_id" not in profiles.columns:
+        return None
+    rows = profiles[profiles["user_id"].astype(str) == str(user_id)]
+    return None if rows.empty else rows.iloc[-1]
+
+
+def apply_calibration(
+    arousal: np.ndarray,
+    valence_probs: pd.DataFrame,
+    profile: pd.Series | None,
+) -> tuple[np.ndarray, pd.DataFrame]:
+    if profile is None:
+        return arousal, valence_probs
+
+    offset = pd.to_numeric(pd.Series([profile.get("arousal_offset", 0.0)]), errors="coerce").fillna(0.0).iloc[0]
+    calibrated_arousal = np.clip(arousal + float(offset), 0.0, 1.0)
+
+    calibrated_probs = valence_probs.copy()
+    for label in VALENCE_LABELS:
+        shift = pd.to_numeric(
+            pd.Series([profile.get(f"valence_shift_{label}", 1.0)]),
+            errors="coerce",
+        ).fillna(1.0).iloc[0]
+        calibrated_probs[label] = calibrated_probs[label] * float(shift)
+    row_sums = calibrated_probs.sum(axis=1).replace(0, 1)
+    calibrated_probs = calibrated_probs.div(row_sums, axis=0)
+    return calibrated_arousal, calibrated_probs
+
+
+def inferred_mood(valence_label: str, arousal: float) -> str:
+    if valence_label == "positive":
+        return "excited" if arousal >= 0.65 else "happy" if arousal >= 0.40 else "relaxed"
+    if valence_label == "negative":
+        return "tense" if arousal >= 0.60 else "sad"
+    return "alert" if arousal >= 0.65 else "calm" if arousal <= 0.35 else "neutral"
+
+
+def score_for_mood(
+    table: pd.DataFrame,
+    *,
+    target_mood: str,
+    arousal: np.ndarray,
+    valence_probs: pd.DataFrame,
+) -> pd.DataFrame:
+    if target_mood not in MOOD_TARGETS:
+        raise ValueError(f"Unknown target mood: {target_mood}")
+    target_valence, target_arousal = MOOD_TARGETS[target_mood]
+    arousal_fit = 1.0 - np.abs(arousal - target_arousal)
+    valence_fit = valence_probs[target_valence].to_numpy(dtype=float)
 
     scored = table.copy()
-    scored["preference_prob"] = predict_positive_probability(preference_bundle, scored)
-    scored["arousal_prob"] = predict_positive_probability(arousal_bundle, scored)
-    scored["valence_prob"] = predict_positive_probability(valence_bundle, scored)
-    scored["calm_prob"] = 1 - scored["arousal_prob"]
-
-    if target_mode == "calm":
-        scored["score"] = (
-            0.45 * scored["preference_prob"]
-            + 0.40 * scored["calm_prob"]
-            + 0.15 * scored["valence_prob"]
-        )
-    elif target_mode == "hype":
-        scored["score"] = (
-            0.45 * scored["preference_prob"]
-            + 0.40 * scored["arousal_prob"]
-            + 0.15 * scored["valence_prob"]
-        )
-    else:
-        raise ValueError("target_mode must be calm or hype")
-
+    scored["target_mood"] = target_mood
+    scored["predicted_arousal"] = arousal
+    for label in VALENCE_LABELS:
+        scored[f"valence_prob_{label}"] = valence_probs[label].to_numpy(dtype=float)
+    scored["predicted_valence"] = valence_probs.idxmax(axis=1).to_numpy()
+    scored["predicted_mood"] = [
+        inferred_mood(label, value)
+        for label, value in zip(scored["predicted_valence"], scored["predicted_arousal"], strict=False)
+    ]
+    scored["score"] = 0.60 * valence_fit + 0.40 * arousal_fit
     scored = scored.sort_values("score", ascending=False).reset_index(drop=True)
     scored["rank"] = scored.index + 1
-    scored["target_mode"] = target_mode
-    columns = [
-        "user_id",
-        "target_mode",
-        "rank",
-        "clip_id",
-        "track_name",
-        "artist",
-        "score",
-        "preference_prob",
-        "arousal_prob",
-        "valence_prob",
+    return scored[
+        [
+            "user_id",
+            "target_mood",
+            "rank",
+            "clip_id",
+            "track_name",
+            "artist",
+            "score",
+            "predicted_mood",
+            "predicted_arousal",
+            "predicted_valence",
+            "valence_prob_negative",
+            "valence_prob_neutral",
+            "valence_prob_positive",
+        ]
     ]
-    return scored[columns]
 
 
 def recommend(
     clips_path: Path,
     audio_features_path: Path,
-    biometric_features_path: Path,
     output_path: Path,
     *,
     user_id: str,
-    target_mode: str,
-    session_id: str | None = None,
+    target_mood: str,
+    calibration_profiles_path: Path = CALIBRATION_PROFILES_CSV,
 ) -> pd.DataFrame:
     ensure_project_dirs()
-    table = candidate_table(
-        clips_path,
-        audio_features_path,
-        biometric_features_path,
-        user_id=user_id,
-        session_id=session_id,
-    )
-    modes = ["calm", "hype"] if target_mode == "all" else [target_mode]
-    frames = [score_recommendations(table, mode) for mode in modes]
+    table = candidate_table(clips_path, audio_features_path, user_id=user_id)
+    arousal_bundle = load_bundle(AROUSAL_MODEL)
+    valence_bundle = load_bundle(VALENCE_MODEL)
+
+    arousal = np.clip(predict_regression(arousal_bundle, table), 0.0, 1.0)
+    valence_probs = predict_class_probabilities(valence_bundle, table)
+    profile = load_user_profile(calibration_profiles_path, user_id)
+    arousal, valence_probs = apply_calibration(arousal, valence_probs, profile)
+
+    moods = DEFAULT_ALL_MOODS if target_mood == "all" else [target_mood]
+    frames = [
+        score_for_mood(table, target_mood=mood, arousal=arousal, valence_probs=valence_probs)
+        for mood in moods
+    ]
     result = pd.concat(frames, ignore_index=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output_path, index=False)
@@ -162,24 +161,24 @@ def recommend(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Rank BioBeat recommendations for calm or hype mode.")
+    parser = argparse.ArgumentParser(description="Rank BioBeat recommendations for a desired mood.")
     parser.add_argument("--clips", default=str(CLIPS_CSV))
     parser.add_argument("--audio-features", default=str(AUDIO_FEATURES_CSV))
-    parser.add_argument("--biometric-features", default=str(FAKE_BIOMETRICS_CSV))
     parser.add_argument("--output", default=str(RECOMMENDATIONS_CSV))
-    parser.add_argument("--target-mode", choices=["calm", "hype", "all"], default="calm")
+    parser.add_argument("--target-mood", "--target-mode", choices=sorted(MOOD_TARGETS) + ["all"], default="calm")
     parser.add_argument("--user-id", required=True)
-    parser.add_argument("--session-id")
+    parser.add_argument("--session-id", help="Accepted for older commands; calibration profiles are selected by user ID.")
+    parser.add_argument("--biometric-features", help="Accepted for older commands; recommendations use audio features plus calibration profiles.")
+    parser.add_argument("--calibration-profiles", default=str(CALIBRATION_PROFILES_CSV))
     args = parser.parse_args()
 
     result = recommend(
         repo_path(args.clips),
         repo_path(args.audio_features),
-        repo_path(args.biometric_features),
         repo_path(args.output),
         user_id=args.user_id,
-        target_mode=args.target_mode,
-        session_id=args.session_id,
+        target_mood=args.target_mood,
+        calibration_profiles_path=repo_path(args.calibration_profiles),
     )
     print(f"Wrote {len(result)} recommendations to {repo_path(args.output)}")
 

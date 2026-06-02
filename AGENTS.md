@@ -80,3 +80,6 @@ Do not leave that learning only in chat history.
 - The five clean reverse queues are `data/collection_batches/clean_reverse_b01_240_201.csv` through `data/collection_batches/clean_reverse_b05_040_001.csv`.
 - The pre-rerecord snapshot is `data/archive/pre_clean_reverse_20260601_002708/`.
 - Apple Watch HR has not yet been imported into any real session.
+- When merging revised-models work into main, do not delete or overwrite Jason's uploaded EDA, song, label, sensor, curated export, quality-manifest, archive, or collection-batch data.
+- BioBeat's final valence representation for training and recommendations should be string labels `negative`, `neutral`, and `positive`; Jason's recent raw labels have numeric `valence` plus string `mood`, so prefer the string `mood` label and convert numeric valence only as a fallback.
+- Do not build continuous real-time mood guessing for BioBeat yet; focus on offline generic models plus short user calibration.

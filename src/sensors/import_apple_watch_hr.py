@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pandas as pd
@@ -50,6 +51,7 @@ HR_ALIASES = {
     "heart rate bpm",
     "heart rate count min",
 }
+APPLE_HEALTH_HR_TYPE = "HKQuantityTypeIdentifierHeartRate"
 
 
 def normalize_column(value: object) -> str:
@@ -74,6 +76,31 @@ def parse_timestamps(values: pd.Series) -> pd.Series:
     except AttributeError:
         parsed = parsed.apply(lambda value: value.tz_localize(None) if getattr(value, "tzinfo", None) else value)
     return parsed
+
+
+def read_apple_health_xml(source: object) -> pd.DataFrame:
+    tree = ET.parse(source)
+    rows: list[dict[str, object]] = []
+    for record in tree.iterfind(".//Record"):
+        if record.attrib.get("type") != APPLE_HEALTH_HR_TYPE:
+            continue
+        rows.append(
+            {
+                "timestamp": record.attrib.get("startDate") or record.attrib.get("creationDate"),
+                "value": record.attrib.get("value"),
+                "unit": record.attrib.get("unit", ""),
+                "sourceName": record.attrib.get("sourceName", ""),
+            }
+        )
+    if not rows:
+        raise ValueError("No Apple Health heart-rate records were found in the XML file.")
+    return pd.DataFrame(rows)
+
+
+def read_health_file(path: Path) -> pd.DataFrame:
+    if path.suffix.lower() == ".xml":
+        return read_apple_health_xml(path)
+    return pd.read_csv(path)
 
 
 def default_sensor_path(labels_path: Path) -> Path:
@@ -144,7 +171,7 @@ def build_hr_rows(
     time_offset_seconds: float,
 ) -> list[dict[str, object]]:
     return build_hr_rows_from_frames(
-        health=pd.read_csv(health_csv),
+        health=read_health_file(health_csv),
         labels=pd.read_csv(labels_file),
         source=source,
         time_offset_seconds=time_offset_seconds,
@@ -164,9 +191,9 @@ def write_imported_rows(path: Path, rows: list[dict[str, object]], *, source: st
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Import Apple Watch or Apple Health heart-rate CSV rows into a BioBeat raw sensor file."
+        description="Import Apple Watch or Apple Health heart-rate CSV/XML rows into a BioBeat raw sensor file."
     )
-    parser.add_argument("--health-csv", required=True, help="CSV exported from Apple Watch/Apple Health.")
+    parser.add_argument("--health-csv", required=True, help="CSV or Apple Health XML exported from Apple Watch/Apple Health.")
     parser.add_argument("--labels-file", required=True, help="BioBeat labels CSV for the matching session.")
     parser.add_argument("--output", help="Raw sensor CSV to update. Defaults to the matching session sensor file.")
     parser.add_argument("--source", default="apple_watch_csv")
@@ -174,7 +201,7 @@ def main() -> None:
         "--time-offset-seconds",
         type=float,
         default=0.0,
-        help="Optional timestamp shift if the Health CSV clock does not line up with the dashboard clock.",
+        help="Optional timestamp shift if the Health file clock does not line up with the dashboard clock.",
     )
     parser.add_argument(
         "--append",

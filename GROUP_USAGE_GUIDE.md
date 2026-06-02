@@ -135,9 +135,11 @@ You rate each song after hearing it.
 
 `emotion`: how the song made you feel.
 
-- `1` = negative
-- `2` = neutral
-- `3` = positive
+- `negative` = sad, angry, tense, uneasy, or otherwise negative; it does not mean dislike
+- `neutral` = emotionally mixed or not clearly positive/negative
+- `positive` = pleasant, happy, peaceful, excited, or otherwise positive
+
+Older collected files may contain numeric `valence` values `1`, `2`, and `3` beside a string `mood` column. The modeling pipeline uses the string `mood` label when it is `negative`, `neutral`, or `positive`, and writes normalized training output as string valence labels.
 
 `familiarity`: how familiar the song felt.
 
@@ -199,7 +201,7 @@ data/raw/sensor/{session_id}_sensor.csv
 
 ## Apple Watch HR Import
 
-Apple Watch heart rate is not treated as a live serial sensor. After a collection session, export heart-rate samples from Apple Health or a Health export app as CSV, then upload the CSV on the dashboard completion screen. The app previews how many HR samples matched each rest/listen window before importing.
+Apple Watch heart rate is not treated as a live serial sensor. After a collection session, export heart-rate samples from Apple Health as XML or from a Health export app as CSV, then upload the file on the dashboard completion screen. The app previews how many HR samples matched each rest/listen window before importing.
 
 You can also import from the command line:
 
@@ -213,7 +215,7 @@ The importer finds a timestamp column and an HR/BPM/value column, matches sample
 data/raw/sensor/{session_id}_sensor.csv
 ```
 
-If the Health CSV clock is offset from the dashboard clock, add `--time-offset-seconds`.
+If the Health file clock is offset from the dashboard clock, add `--time-offset-seconds`.
 
 ## Train The Model
 
@@ -238,7 +240,8 @@ models/metrics/
 To generate recommendation rankings:
 
 ```bash
-python src/models/recommend.py --target-mode all --user-id jason --session-id jason_s01
+python src/models/calibrate_user.py --user-id jason --session-id jason_s01 --max-clips 5
+python src/models/recommend.py --target-mood all --user-id jason
 ```
 
 Replace `jason` and `jason_s01` with the IDs you used in the dashboard.

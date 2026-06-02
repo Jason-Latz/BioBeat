@@ -57,6 +57,14 @@ def demo_rating(
     return clamp_rating(base + user_bias + rng.gauss(0, noise))
 
 
+def demo_valence_label(value: int) -> str:
+    if value <= 2:
+        return "negative"
+    if value >= 4:
+        return "positive"
+    return "neutral"
+
+
 def generate_rows(clips: pd.DataFrame, user_id: str, session_id: str, seed: int) -> list[dict[str, object]]:
     rng = random.Random(f"{seed}:{user_id}:{session_id}")
     order = clips.sample(frac=1, random_state=seed + len(user_id) + len(session_id)).reset_index(drop=True)
@@ -74,7 +82,8 @@ def generate_rows(clips: pd.DataFrame, user_id: str, session_id: str, seed: int)
         intended_mood = str(clip.get("intended_mood", "neutral")).lower()
 
         arousal = demo_rating(rng, AROUSAL_BASE.get(intended_arousal, 3), noise=0.7)
-        valence = demo_rating(rng, VALENCE_BASE.get(intended_valence, 3), noise=0.8)
+        valence_rating = demo_rating(rng, VALENCE_BASE.get(intended_valence, 3), noise=0.8)
+        valence = demo_valence_label(valence_rating)
         familiarity = rng.randint(1, 5)
         preference_base = 3 + (0.45 if intended_valence == "positive" else -0.25) + (0.15 * (familiarity - 3))
         preference = demo_rating(rng, preference_base, user_bias=user_preference_bias, noise=0.9)

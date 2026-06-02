@@ -70,6 +70,17 @@ def normalize_mood(value: str) -> str:
     return {"sad": "negative", "happy": "positive"}.get(mood, mood)
 
 
+def normalized_valence(label: dict[str, str]) -> str:
+    mood = normalize_mood(label.get("mood", ""))
+    if mood in {"negative", "neutral", "positive"}:
+        return mood
+    value = str(label.get("valence", "")).strip().lower()
+    if value in {"negative", "neutral", "positive"}:
+        return value
+    numeric_map = {"1": "negative", "2": "neutral", "3": "positive"}
+    return numeric_map.get(value, "neutral")
+
+
 def collection_quality(session_id: str, trial_index: int, has_rating: bool) -> tuple[str, str]:
     if not has_rating:
         return "excluded_unrated_capture", "No saved human rating exists for this sensor capture."
@@ -151,6 +162,7 @@ def export_good_real_data(
             curated_rows.append(
                 {
                     **label,
+                    "valence": normalized_valence(label),
                     "mood": normalize_mood(label.get("mood", "")),
                     "track_name": clip.get("track_name", ""),
                     "artist": clip.get("artist", ""),

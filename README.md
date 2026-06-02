@@ -1,8 +1,8 @@
 # BioBeat
 
-BioBeat is a music recommendation prototype that combines short music previews, self-reported mood labels, audio features, and biometric features to train mood-aware recommendation models.
+BioBeat is a music recommendation prototype that combines short music previews, self-reported valence labels, audio features, and biometric features to train mood-aware recommendation models.
 
-The current implementation has a training collector for self-runs. It can record mock HR/EDA data for testing, read EDA/GSR values from a Seeed GSR sensor connected through a Raspberry Pi Pico serial stream during collection, and import Apple Watch/Apple Health heart-rate CSV rows after a session. It also extracts audio features with `librosa`, turns raw sensor streams into biometric features, and trains baseline models.
+The current implementation has a training collector for self-runs. It can record mock HR/EDA data for testing, read EDA/GSR values from a Seeed GSR sensor connected through a Raspberry Pi Pico serial stream during collection, and import Apple Watch/Apple Health heart-rate CSV or XML rows after a session. It also extracts audio features with `librosa`, turns raw sensor streams into biometric features, normalizes valence to `negative`/`neutral`/`positive`, and trains arousal/valence models.
 
 ## Quick Start
 
@@ -28,7 +28,8 @@ python src/features/extract_audio_features.py
 python src/features/extract_biometric_features.py
 python src/features/merge_features.py --use-real-biometrics
 python src/models/train_models.py
-python src/models/recommend.py --target-mode all --user-id demo_user
+python src/models/calibrate_user.py --user-id demo_user --max-clips 5
+python src/models/recommend.py --target-mood all --user-id demo_user
 ```
 
 The dashboard is the training collection UI. It first reminds the participant to start an Apple Watch Workout, then runs a streamlined loop: 20-second rest recording, automatic 30-second song playback/recording, then two large rating-button prompts for emotion and familiarity. Raw sensor samples are saved to `data/raw/sensor/{session_id}_sensor.csv`.
@@ -42,7 +43,7 @@ EDA:1.42
 {"gsr":1.42}
 ```
 
-Apple Watch HR is imported at the end of the dashboard session from a CSV exported from Apple Health or a Health export app. The upload panel matches HR timestamps to the rest/listen windows in the labels file, previews per-song HR sample coverage, then appends HR-only rows to the same raw sensor CSV. If the Seeed stream includes milliseconds since sensor start, BioBeat stores that as `sensor_elapsed_ms`; Apple Watch sync still uses the dashboard's wall-clock timestamps.
+Apple Watch HR is imported at the end of the dashboard session from a CSV exported from Apple Health/a Health export app or from Apple Health XML. The upload panel matches HR timestamps to the rest/listen windows in the labels file, previews per-song HR sample coverage, then appends HR-only rows to the same raw sensor CSV. If the Seeed stream includes milliseconds since sensor start, BioBeat stores that as `sensor_elapsed_ms`; Apple Watch sync still uses the dashboard's wall-clock timestamps.
 
 For a fully local demo without collecting labels by hand, generate synthetic labels first:
 
@@ -78,7 +79,14 @@ The sensor feature extractor writes `data/processed/biometric_features_real.csv`
 user_id,session_id,clip_id,hr_mean,hr_max,hr_change_from_baseline,hr_slope,hr_recovery,eda_mean,eda_change_from_baseline,eda_peak_count,eda_max_amplitude,eda_slope,eda_recovery
 ```
 
-As long as the schema matches, the merger, model training, recommender, and dashboard can reuse the same pipeline.
+The merger adds normalized model targets:
+
+- `valence`: the final string label, always `negative`, `neutral`, or `positive`
+- `valence_label`: the same string label for model training
+- `valence_ordinal`: the same label encoded as `-1`, `0`, or `1` for the discrete regression experiment
+- `arousal_score`: a `0.0` to `1.0` biometric arousal label derived from approved EDA response and Apple Watch HR/PPG-derived response when available
+
+Jason's recent real labels contain numeric `valence` plus string `mood`; the pipeline prefers the string `mood` label and converts numeric legacy values only as a fallback.
 
 ## Project Structure
 

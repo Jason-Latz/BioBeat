@@ -19,6 +19,7 @@ from biobeat_paths import (  # noqa: E402
     ensure_project_dirs,
     repo_path,
 )
+from features.target_features import add_model_targets  # noqa: E402
 
 
 LABEL_COLUMNS = [
@@ -37,13 +38,33 @@ LABEL_COLUMNS = [
     "familiarity",
     "notes",
 ]
+EDA_QUALITY_MANIFEST_CSV = PROCESSED_DIR / "real_eda_quality_manifest.csv"
+GOOD_REAL_DATA_CSV = PROCESSED_DIR / "good_real_data.csv"
+EDA_COLUMNS = [
+    "eda_mean",
+    "eda_change_from_baseline",
+    "eda_peak_count",
+    "eda_max_amplitude",
+    "eda_slope",
+    "eda_recovery",
+]
+CLIP_METADATA_COLUMNS = [
+    "track_name",
+    "artist",
+    "album",
+    "genre",
+    "preview_url",
+    "track_id",
+    "intended_arousal",
+    "intended_valence",
+    "intended_mood",
+]
 
 
-def read_labels(labels_dir: Path) -> pd.DataFrame:
-    paths = sorted(glob.glob(str(labels_dir / "*_labels.csv")))
+def read_label_frames(paths: list[Path]) -> pd.DataFrame:
     if not paths:
         raise FileNotFoundError(
-            f"No label files found in {labels_dir}. Run the Streamlit runner or "
+            "No label files found. Run the Streamlit runner or "
             "src/features/generate_demo_labels.py first."
         )
     frames = [pd.read_csv(path) for path in paths]
@@ -55,8 +76,6 @@ def read_labels(labels_dir: Path) -> pd.DataFrame:
         "trial_index",
         "clip_start_time",
         "clip_end_time",
-        "preference",
-        "arousal",
         "valence",
         "mood",
         "familiarity",
@@ -70,25 +89,13 @@ def read_labels(labels_dir: Path) -> pd.DataFrame:
     return labels
 
 
-def add_binary_labels(table: pd.DataFrame) -> pd.DataFrame:
-    table = table.copy()
-    for column in ("preference", "arousal"):
-        table[column] = pd.to_numeric(table[column], errors="coerce")
-        binary = pd.Series(pd.NA, index=table.index)
-        labeled = table[column].notna()
-        binary.loc[labeled] = (table.loc[labeled, column] >= 4).astype(int)
-        table[f"{column}_binary"] = binary
+def read_labels(labels_dir: Path) -> pd.DataFrame:
+    paths = [Path(path) for path in sorted(glob.glob(str(labels_dir / "*_labels.csv")))]
+    return read_label_frames(paths)
 
-    table["valence"] = pd.to_numeric(table["valence"], errors="coerce")
-    mood = table.get("mood", pd.Series("", index=table.index)).astype(str).str.strip().str.lower()
-    binary = pd.Series(pd.NA, index=table.index)
-    labeled = table["valence"].notna()
-    positive = (table["valence"] >= 4) | (
-        (table["valence"] == 3) & mood.isin({"positive", "happy"})
-    )
-    binary.loc[labeled] = positive.loc[labeled].astype(int)
-    table["valence_binary"] = binary
-    return table
+
+def read_labels_file(labels_file: Path) -> pd.DataFrame:
+    return read_label_frames([labels_file])
 
 
 def merge_features(
@@ -97,10 +104,12 @@ def merge_features(
     audio_features_path: Path,
     biometric_features_path: Path,
     output_path: Path,
+    labels_file: Path | None = None,
 ) -> pd.DataFrame:
     ensure_project_dirs()
     clips = pd.read_csv(clips_path)
-    labels = read_labels(labels_dir)
+    labels = read_labels_file(labels_file) if labels_file is not None else read_labels(labels_dir)
+    labels = labels.drop(columns=CLIP_METADATA_COLUMNS, errors="ignore")
 
     if not audio_features_path.exists():
         raise FileNotFoundError(
@@ -116,27 +125,48 @@ def merge_features(
 
     table = (
         labels.merge(
-            clips[
-                [
-                    "clip_id",
-                    "track_name",
-                    "artist",
-                    "album",
-                    "genre",
-                    "preview_url",
-                    "track_id",
-                    "intended_arousal",
-                    "intended_valence",
-                    "intended_mood",
-                ]
-            ],
+            clips[["clip_id", *CLIP_METADATA_COLUMNS]],
             on="clip_id",
             how="left",
         )
         .merge(audio, on="clip_id", how="left")
         .merge(biometrics, on=["user_id", "session_id", "clip_id"], how="left")
     )
-    table = add_binary_labels(table)
+    if EDA_QUALITY_MANIFEST_CSV.exists():
+        manifest = pd.read_csv(EDA_QUALITY_MANIFEST_CSV)
+        manifest_columns = [
+            "session_id",
+            "trial_index",
+            "clip_id",
+            "use_eda_for_primary_biometric_training",
+            "collection_quality",
+            "exclusion_reason",
+        ]
+        available_columns = [column for column in manifest_columns if column in manifest.columns]
+        table = table.merge(
+            manifest[available_columns],
+            on=[column for column in ["session_id", "trial_index", "clip_id"] if column in available_columns],
+            how="left",
+        )
+        if "use_eda_for_primary_biometric_training_y" in table.columns:
+            table["use_eda_for_primary_biometric_training"] = table[
+                "use_eda_for_primary_biometric_training_y"
+            ].combine_first(table.get("use_eda_for_primary_biometric_training_x"))
+            table = table.drop(
+                columns=[
+                    "use_eda_for_primary_biometric_training_x",
+                    "use_eda_for_primary_biometric_training_y",
+                ],
+                errors="ignore",
+            )
+        use_eda = table.get("use_eda_for_primary_biometric_training", "yes")
+        if not isinstance(use_eda, pd.Series):
+            use_eda = pd.Series("yes", index=table.index)
+        excluded = use_eda.astype(str).str.lower().ne("yes")
+        for column in EDA_COLUMNS:
+            if column in table.columns:
+                table.loc[excluded, column] = pd.NA
+    table = add_model_targets(table)
 
     first_columns = [
         "user_id",
@@ -162,6 +192,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Merge labels, metadata, audio, and biometric features.")
     parser.add_argument("--clips", default=str(CLIPS_CSV))
     parser.add_argument("--labels-dir", default=str(LABELS_DIR))
+    parser.add_argument(
+        "--labels-file",
+        help="Optional single label/export CSV. Use data/processed/good_real_data.csv for curated real training data.",
+    )
     parser.add_argument("--audio-features", default=str(AUDIO_FEATURES_CSV))
     parser.add_argument("--biometric-features", default=str(FAKE_BIOMETRICS_CSV))
     parser.add_argument("--use-real-biometrics", action="store_true")
@@ -181,6 +215,7 @@ def main() -> None:
         repo_path(args.audio_features),
         biometric_path,
         repo_path(args.output),
+        labels_file=repo_path(args.labels_file) if args.labels_file else None,
     )
     print(f"Wrote {len(table)} training rows to {repo_path(args.output)}")
 

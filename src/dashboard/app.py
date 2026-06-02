@@ -278,6 +278,12 @@ def parse_digit(value: object, *, allowed: set[int]) -> int | None:
 def saved_emotion_value(saved: pd.Series | None) -> str:
     if saved is None:
         return ""
+    valence = str(saved_field(saved, "valence", "")).strip().lower()
+    valence = {"sad": "negative", "happy": "positive"}.get(valence, valence)
+    for number, label in EMOTION_LABELS.items():
+        if valence == label:
+            return str(number)
+
     mood = str(saved_field(saved, "mood", "")).strip().lower()
     mood = {"sad": "negative", "happy": "positive"}.get(mood, mood)
     for number, label in EMOTION_LABELS.items():
@@ -313,8 +319,9 @@ def rating_inputs_are_valid(clip_id: str) -> tuple[int | None, int | None]:
     return emotion, familiarity
 
 
-def choose_digit_button(label: str, value: int, *, key: str) -> bool:
-    return full_width_button(f"{value}. {label}", key=key)
+def choose_digit_button(label: str, value: int, *, key: str, show_number: bool = True) -> bool:
+    button_label = f"{value}. {label}" if show_number else label
+    return full_width_button(button_label, key=key)
 
 
 def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
@@ -338,7 +345,7 @@ def save_current_rating(clip: pd.Series, labels: pd.DataFrame) -> None:
         "clip_end_time": st.session_state.clip_end_time or saved_field(saved, "clip_end_time", iso_now()),
         "preference": "",
         "arousal": "",
-        "valence": emotion,
+        "valence": mood,
         "mood": mood,
         "familiarity": familiarity,
         "notes": "",
@@ -535,13 +542,14 @@ def render_rating_flashcard(clip: pd.Series, labels: pd.DataFrame, saved: pd.Ser
         current = st.session_state.get(emotion_key, "")
         st.subheader("Emotion?")
         st.markdown("### Click one answer")
-        st.caption("1 = negative | 2 = neutral | 3 = positive")
         if current:
-            st.caption(f"Current saved answer: {current}")
+            saved_number = parse_digit(current, allowed=set(EMOTION_LABELS))
+            saved_label = EMOTION_LABELS.get(saved_number, str(current))
+            st.caption(f"Current saved answer: {saved_label}")
         cols = st.columns(3)
         for index, (value, label) in enumerate(EMOTION_LABELS.items()):
             with cols[index]:
-                if choose_digit_button(label, value, key=f"emotion_{clip_id}_{value}"):
+                if choose_digit_button(label, value, key=f"emotion_{clip_id}_{value}", show_number=False):
                     set_rating_digit_and_advance(
                         clip=clip,
                         labels=labels,
@@ -558,7 +566,7 @@ def render_rating_flashcard(clip: pd.Series, labels: pd.DataFrame, saved: pd.Ser
     st.markdown("### Click one answer")
     emotion_number = parse_digit(emotion, allowed=set(EMOTION_LABELS))
     if emotion_number is not None:
-        st.caption(f"Emotion: {emotion_number} ({EMOTION_LABELS[emotion_number]})")
+        st.caption(f"Emotion: {EMOTION_LABELS[emotion_number]}")
     if current:
         st.caption(f"Current saved answer: {current}")
 
@@ -648,7 +656,7 @@ def render_collection_flow(clip: pd.Series, labels: pd.DataFrame) -> None:
 
 def render_sensor_panel(clip_id: str, trial_index: int) -> None:
     with st.expander("Sensor Recording", expanded=False):
-        st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV rows can be imported into the same file after the run.")
+        st.caption("Raw Seeed GSR/EDA samples are saved during collection. Apple Watch HR CSV/XML rows can be imported into the same file after the run.")
         sensor_file = sensor_path(st.session_state.session_id)
         st.code(str(sensor_file.relative_to(Path.cwd())), language="text")
 
@@ -702,7 +710,7 @@ def render_sensor_setup() -> tuple[str, str, int]:
             st.warning("No serial ports found. Connect the Raspberry Pi serial output, then reload.")
             serial_port = st.text_input("Manual serial port", value="/dev/cu.usbserial")
         baud_rate = int(st.number_input("Baud rate", min_value=1200, max_value=2000000, value=115200, step=9600))
-        st.caption("Accepted Seeed GSR formats: `GSR:1.42`, `EDA:1.42`, `1.42`, or JSON like `{\"gsr\":1.42}`. Apple Watch HR is imported from CSV later.")
+        st.caption("Accepted Seeed GSR formats: `GSR:1.42`, `EDA:1.42`, `1.42`, or JSON like `{\"gsr\":1.42}`. Apple Watch HR is imported from CSV or XML later.")
     else:
         st.caption("Mock sensor generates plausible HR and EDA values so the training flow can be tested without hardware.")
 
@@ -712,14 +720,14 @@ def render_sensor_setup() -> tuple[str, str, int]:
 def render_apple_watch_start_instructions() -> None:
     st.info(
         "Before you begin: start an Apple Watch Workout and keep it running for the full BioBeat session. "
-        "After the last song, export heart-rate data as a CSV and upload it on the completion screen."
+        "After the last song, export heart-rate data as a CSV or Apple Health XML and upload it on the completion screen."
     )
 
 
 def render_apple_watch_import(labels: pd.DataFrame) -> None:
     st.subheader("Apple Watch Heart Rate Upload")
     st.caption(
-        "Upload the heart-rate CSV after finishing the session. BioBeat syncs it by matching Apple Watch timestamps "
+        "Upload the heart-rate CSV or Apple Health XML after finishing the session. BioBeat syncs it by matching Apple Watch timestamps "
         "to each recorded rest and song window."
     )
 
@@ -728,21 +736,26 @@ def render_apple_watch_import(labels: pd.DataFrame) -> None:
         st.warning("No saved ratings/windows were found for this session yet.")
         return
 
-    uploaded = st.file_uploader("Upload Apple Watch / Apple Health heart-rate CSV", type=["csv"])
+    uploaded = st.file_uploader("Upload Apple Watch / Apple Health heart-rate file", type=["csv", "xml"])
     offset = st.number_input(
         "Time offset seconds",
         value=0.0,
         step=1.0,
-        help="Use this only if the CSV timestamps look shifted from the dashboard timestamps.",
+        help="Use this only if the Apple Watch timestamps look shifted from the dashboard timestamps.",
     )
     replace_prior = st.checkbox("Replace previous Apple Watch import for this session", value=True)
 
     if uploaded is None:
-        st.info("Upload the exported HR CSV here when the session is done.")
+        st.info("Upload the exported HR file here when the session is done.")
         return
 
     try:
-        health = pd.read_csv(uploaded)
+        if str(uploaded.name).lower().endswith(".xml"):
+            from sensors.import_apple_watch_hr import read_apple_health_xml
+
+            health = read_apple_health_xml(uploaded)
+        else:
+            health = pd.read_csv(uploaded)
         rows = build_hr_rows_from_frames(
             health=health,
             labels=session_labels,
