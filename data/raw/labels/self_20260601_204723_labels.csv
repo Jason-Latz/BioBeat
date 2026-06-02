@@ -1,0 +1,2 @@
+user_id,session_id,clip_id,trial_index,rest_start_time,rest_end_time,clip_start_time,clip_end_time,preference,arousal,valence,mood,familiarity,notes
+Paulina,self_20260601_204723,clip_001,1,2026-06-01T20:47:25.717,2026-06-01T20:47:45.893,2026-06-01T20:47:48.074,2026-06-01T20:48:18.186,,,3,positive,3,
